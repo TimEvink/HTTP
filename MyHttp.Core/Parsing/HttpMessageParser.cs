@@ -29,10 +29,10 @@ public abstract class HttpMessageParser {
         StringBuilder stringbuilder = new();
         while (true) {
             int c = _reader.Read();
-            if (c == -1) throw new BadRequestException("Unexpected end of stream");
+            if (c == -1) throw new BadMessageException("Unexpected end of stream");
             if (c == '\n') break;
             if (c != '\r') stringbuilder.Append((char)c);
-            if (stringbuilder.Length > maxChars) throw new BadRequestException("Line too long");
+            if (stringbuilder.Length > maxChars) throw new BadMessageException("Line too long");
         }
         return stringbuilder.ToString();
     }
@@ -65,10 +65,10 @@ public abstract class HttpMessageParser {
             if (headerline.Length == 0) break;
             headercount++;
             if (headercount > _maxHeaderCount) {
-                throw new BadRequestException($"Maximum header count ({_maxHeaderCount}) exceeded.");
+                throw new BadMessageException($"Maximum header count ({_maxHeaderCount}) exceeded.");
             }
             if (!TryParseHeaderLine(headerline, out string headername, out string headervalue)) {
-                throw new BadRequestException($"Incorrect header syntax for line: {headerline}");
+                throw new BadMessageException($"Incorrect header syntax for line: {headerline}");
             }
             headers.Add(headername, headervalue);
         }
