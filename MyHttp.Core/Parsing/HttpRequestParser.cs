@@ -10,7 +10,7 @@ public sealed class HttpRequestParser : HttpMessageParser {
     public HttpRequestParser(Stream stream) : base(stream) { }
 
     private (HttpMethod, HttpRequestTarget, HttpVersion) ParseRequestLine() {
-        string? firstline = Reader.ReadLine();
+        string? firstline = ReadLineWithLimit(_maxStartLineLength);
         if (firstline == null) {
             throw new BadRequestException("Unexpected end of stream");
         }
@@ -31,6 +31,6 @@ public sealed class HttpRequestParser : HttpMessageParser {
     public HttpRequest Parse() {
         var (method, target, version) = ParseRequestLine();
         var headers = ParseHeaders();
-        return new HttpRequest(method, target, version, headers, Reader.BaseStream);
+        return new HttpRequest(method, target, version, headers, _reader.BaseStream);
     }
 }

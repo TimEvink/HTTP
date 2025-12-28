@@ -11,13 +11,13 @@ public abstract class HttpRequestSerializer : HttpMessageSerializer{
         HttpRequestTarget target,
         HttpVersion version
     ) {
-        Writer.WriteLine($"{method.ToString()} {target.Raw} HTTP/{version.Major}.{version.Minor}");
+        _writer.WriteLine($"{method.ToString()} {target.Raw} HTTP/{version.Major}.{version.Minor}");
     }
 
     public void Serialize(HttpRequest request) {
         SerializeRequestLine(request.Method, request.Target, request.Version);
         SerializeHeaders(request.Headers);
-        request.Body?.CopyTo(Writer.BaseStream);
-        Writer.Flush();
+        request.Body?.CopyTo(_writer.BaseStream);
+        _writer.Flush();
     }
 }

@@ -11,13 +11,13 @@ public abstract class HttpResponseSerializer : HttpMessageSerializer{
         int statuscode,
         string message
     ) {
-        Writer.WriteLine($"HTTP/{version.Major}.{version.Minor} {statuscode} {message}");
+        _writer.WriteLine($"HTTP/{version.Major}.{version.Minor} {statuscode} {message}");
     }
 
     public void Serialize(HttpResponse response) {
         SerializeResponseLine(response.Version, response.StatusCode, response.Message);
         SerializeHeaders(response.Headers);
-        response.Body?.CopyTo(Writer.BaseStream);
-        Writer.Flush();
+        response.Body?.CopyTo(_writer.BaseStream);
+        _writer.Flush();
     }
 }

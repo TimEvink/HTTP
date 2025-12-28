@@ -10,7 +10,7 @@ public sealed class HttpResponseParser : HttpMessageParser {
     public HttpResponseParser(Stream stream) : base(stream) { }
 
     private (HttpVersion, int, string) ParseResponseLine() {
-        string? firstline = Reader.ReadLine();
+        string? firstline = ReadLineWithLimit(_maxStartLineLength);
         if (firstline == null) {
             throw new BadResponseException("Unexpected end of stream.");
         }
@@ -19,10 +19,10 @@ public sealed class HttpResponseParser : HttpMessageParser {
             throw new BadResponseException("Incorrect syntax for first response line.");
         }
         if (!TryParseHttpVersion(parts[0], out HttpVersion version)) {
-            throw new BadRequestException("Incorrect Http version.");
+            throw new BadResponseException("Incorrect Http version.");
         }
-        if (!int.TryParse(parts[1], out int statuscode)) {
-            throw new BadRequestException("Incorrect Http status code");
+        if (!int.TryParse(parts[1], out int statuscode) || statuscode < 100 || statuscode > 599) {
+            throw new BadResponseException("Invalid Http status code");
         }
         return (version, statuscode, parts[2]);
     }
@@ -30,6 +30,6 @@ public sealed class HttpResponseParser : HttpMessageParser {
     public HttpResponse Parse() {
         var (version, statuscode, message) = ParseResponseLine();
         var headers = ParseHeaders();
-        return new HttpResponse(version, statuscode, message, headers, Reader.BaseStream);
+        return new HttpResponse(version, statuscode, message, headers, _reader.BaseStream);
     }
 }

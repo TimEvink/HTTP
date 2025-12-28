@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Collections.Generic;
 
 using MyHttp.Core.Messages;
@@ -7,9 +8,33 @@ using MyHttp.Core.Exceptions;
 
 namespace MyHttp.Core.Parsing;
 public abstract class HttpMessageParser {
-    protected readonly StreamReader Reader;
-    protected HttpMessageParser(Stream stream) {
-        Reader = new StreamReader(stream, leaveOpen: true);
+    //reader is not allowed to read message bodies.
+    protected readonly StreamReader _reader;
+    protected readonly int _maxStartLineLength;
+    protected readonly int _maxHeaderLineLength;
+    protected readonly int _maxHeaderCount;
+    protected HttpMessageParser(
+        Stream stream,
+        int maxStartLineLength = 8192,
+        int maxHeaderLineLength = 8192,
+        int maxHeaderCount = 100
+    ) {
+        _reader = new(stream, leaveOpen: true);
+        _maxStartLineLength = maxStartLineLength;
+        _maxHeaderLineLength = maxHeaderLineLength;
+        _maxHeaderCount = maxHeaderCount;
+    }
+
+    protected string ReadLineWithLimit(int maxChars) {
+        StringBuilder stringbuilder = new();
+        while (true) {
+            int c = _reader.Read();
+            if (c == -1) throw new BadRequestException("Unexpected end of stream");
+            if (c == '\n') break;
+            if (c != '\r') stringbuilder.Append((char)c);
+            if (stringbuilder.Length > maxChars) throw new BadRequestException("Line too long");
+        }
+        return stringbuilder.ToString();
     }
 
     protected static bool TryParseHttpVersion(string rawVersion, out HttpVersion version) {
@@ -34,9 +59,14 @@ public abstract class HttpMessageParser {
     }
     protected Dictionary<string, string> ParseHeaders() {
         Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
-        string? headerline;
-        while ((headerline = Reader.ReadLine()) != null) {
+        int headercount = 0;
+        while (true) {
+            string? headerline = ReadLineWithLimit(_maxHeaderLineLength);
             if (headerline.Length == 0) break;
+            headercount++;
+            if (headercount > _maxHeaderCount) {
+                throw new BadRequestException($"Maximum header count ({_maxHeaderCount}) exceeded.");
+            }
             if (!TryParseHeaderLine(headerline, out string headername, out string headervalue)) {
                 throw new BadRequestException($"Incorrect header syntax for line: {headerline}");
             }
@@ -44,5 +74,4 @@ public abstract class HttpMessageParser {
         }
         return headers;
     }
-
 }
