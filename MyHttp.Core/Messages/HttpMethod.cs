@@ -1,5 +1,5 @@
 namespace MyHttp.Core.Messages;
-public enum HttpMethod {
+public enum HttpMethod : byte {
     GET,
     POST,
     PUT,

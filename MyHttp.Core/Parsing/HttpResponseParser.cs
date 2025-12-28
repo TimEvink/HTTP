@@ -9,6 +9,13 @@ namespace MyHttp.Core.Parsing;
 public sealed class HttpResponseParser : HttpMessageParser {
     public HttpResponseParser(Stream stream) : base(stream) { }
 
+    public HttpResponseParser(
+        Stream stream,
+        int maxStartLineLength,
+        int maxHeaderLineLength,
+        int maxHeaderCount
+    ) : base(stream, maxStartLineLength, maxHeaderLineLength, maxHeaderCount) {}
+
     private (HttpVersion, int, string) ParseResponseLine() {
         string? firstline = ReadLineWithLimit(_maxStartLineLength);
         if (firstline == null) {

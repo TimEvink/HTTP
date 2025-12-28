@@ -9,11 +9,15 @@ namespace MyHttp.Core.Parsing;
 public sealed class HttpRequestParser : HttpMessageParser {
     public HttpRequestParser(Stream stream) : base(stream) { }
 
+    public HttpRequestParser(
+        Stream stream,
+        int maxStartLineLength,
+        int maxHeaderLineLength,
+        int maxHeaderCount
+    ) : base(stream, maxStartLineLength, maxHeaderLineLength, maxHeaderCount) {}
+
     private (HttpMethod, HttpRequestTarget, HttpVersion) ParseRequestLine() {
-        string? firstline = ReadLineWithLimit(_maxStartLineLength);
-        if (firstline == null) {
-            throw new BadRequestException("Unexpected end of stream");
-        }
+        string firstline = ReadLineWithLimit(_maxStartLineLength);
         string[] parts = firstline.Split(' ', options: StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 3) {
             throw new BadRequestException("Incorrect syntax for first request line");
@@ -21,7 +25,6 @@ public sealed class HttpRequestParser : HttpMessageParser {
         if (!Enum.TryParse<HttpMethod>(parts[0], ignoreCase: true, out var method)) {
             throw new BadRequestException("Incorrect Http method");
         }
-
         if (!TryParseHttpVersion(parts[2], out HttpVersion version)) {
             throw new BadRequestException("Incorrect Http version");
         }
