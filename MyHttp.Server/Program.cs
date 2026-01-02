@@ -12,7 +12,7 @@ using MyHttp.Server;
 namespace MyHttp.Server;
 static class Program {
     static void Main(string[] args) {
-        int port = Int32.TryParse(args[0], out int result) ? result : 8000; 
+        int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000; 
         TcpListener server = new(IPAddress.Loopback, port);
         server.Start();
         Console.WriteLine("Starting server.");
