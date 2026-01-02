@@ -16,7 +16,7 @@ The project focuses on:
 - Custom `HttpRequest` and `HttpResponse` models
 - Manual HTTP serialization and parsing
 - Stream-based framing (currently `Content-Length`)
-- End-to-end tested using `MemoryStream`
+- Serialization -> Parsing pipeline tested.
 - Working TCP server and client proof-of-concept
 - No `StreamReader` / `StreamWriter` buffering pitfalls — raw stream control
 
@@ -76,12 +76,8 @@ Making these tests and ensuring they passed happened before the actual servers/c
 - **Clear separation of concrerns**  
   Parsing owns decoding.
   Serialization owns encoding.
-
 - **Framing via streams**
-    - Message bodies are wrapped in framing streams (`ContentLengthEncodingStream`, `ContentLengthDecodingStream`).
-
-- **Protocol correctness**  
-
+  Message bodies are wrapped in framing streams (`ContentLengthEncodingStream`, `ContentLengthDecodingStream`).
 
 ---
 
