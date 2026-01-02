@@ -12,7 +12,7 @@ using MyHttp.Core.Serialization;
 namespace MyHttp.Client;
 static class Program {
     static void Main(string[] args) {
-        int port = Int32.TryParse(args[0], out int result) ? result : 8000;
+        int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000; 
 
         using TcpClient client = new TcpClient("127.0.0.1", port);
         using NetworkStream stream = client.GetStream();
