@@ -70,13 +70,13 @@ Making these tests and ensuring they passed happened before the actual servers/c
 
 ## Design Philosophy
 
-- **Pure stream-based IO**
+- **Pure stream-based IO**  
   No `StreamReader`/`StreamWriter` in the protocol layer, just direct reads and writes on streams.  
   Explicit byte-level control.
 - **Clear separation of concrerns**  
   Parsing owns decoding.
   Serialization owns encoding.
-- **Framing via streams**
+- **Framing via streams**  
   Message bodies are wrapped in framing streams (`ContentLengthEncodingStream`, `ContentLengthDecodingStream`).
 
 ---
@@ -87,14 +87,14 @@ A minimal request/response exchange:
 
 ### Running the Server
 ```bash
-dotnet run --project MyHttp.Server 8000
+dotnet run --project MyHttp.Server
 ```
 
 ### Running the Client
 ```bash
-dotnet run --project MyHttp.Client 8000
+dotnet run --project MyHttp.Client
 ```
-This will trigger a single Request-Response cycle with the Client writing to the Console the body of the response.
+This will trigger a single Request-Response cycle via `localhost:8000` with the Client writing to the Console the body of the response. A different port can be chosen by adding an optional port number to both commands.
 
 ##
 
