@@ -2,8 +2,10 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 
-using MyHttp.Core.Messages;
 using MyHttp.Core.Exceptions;
+using MyHttp.Core.Messages;
+using MyHttp.Core.Framing;
+using MyHttp.Core.Utilities;
 
 namespace MyHttp.Core.Parsing;
 public sealed class HttpResponseParser : HttpMessageParser {
@@ -25,7 +27,7 @@ public sealed class HttpResponseParser : HttpMessageParser {
         if (parts.Length != 3) {
             throw new BadResponseException("Incorrect syntax for first response line.");
         }
-        if (!TryParseHttpVersion(parts[0], out HttpVersion version)) {
+        if (!HttpParseHelpers.TryParseHttpVersion(parts[0], out HttpVersion version)) {
             throw new BadResponseException("Incorrect Http version.");
         }
         if (!int.TryParse(parts[1], out int statuscode) || statuscode < 100 || statuscode > 599) {
@@ -37,6 +39,7 @@ public sealed class HttpResponseParser : HttpMessageParser {
     public HttpResponse Parse() {
         var (version, statuscode, message) = ParseResponseLine();
         var headers = ParseHeaders();
-        return new HttpResponse(version, statuscode, message, headers, _reader.BaseStream);
+        Stream body = Helpers.ShouldConsiderBody(headers) ? DetectFraming.GetDecodedStream(headers, _stream) : Stream.Null;
+        return new HttpResponse(version, statuscode, message, headers, body);
     }
 }
