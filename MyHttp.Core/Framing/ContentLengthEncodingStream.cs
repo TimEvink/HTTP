@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyHttp.Core.Framing;
 public sealed class ContentLengthEncodingStream : Stream {
@@ -12,7 +14,6 @@ public sealed class ContentLengthEncodingStream : Stream {
         _remaining = contentLength;
     }
 
-    // for serialization
     public override void Write(byte[] buffer, int offset, int count) {
         if (buffer == null) throw new ArgumentNullException(nameof(buffer));
         if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
@@ -24,6 +25,19 @@ public sealed class ContentLengthEncodingStream : Stream {
         _remaining -= count;
     }
 
+    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination", nameof(count));
+        if (count == 0) return;
+        if (count > _remaining) throw new InvalidOperationException("Writing more bytes than Content-Length");
+        await _innerStream.WriteAsync(
+            buffer, offset, count, cancellationToken
+        ).ConfigureAwait(false);
+        _remaining -= count;
+    }
+
     public override int Read(byte[] buffer, int offset, int count) {
         if (buffer == null) throw new ArgumentNullException(nameof(buffer));
         if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
@@ -31,7 +45,19 @@ public sealed class ContentLengthEncodingStream : Stream {
         if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination");
         if (count == 0 || _remaining <= 0) return 0;
         int read = _innerStream.Read(buffer, offset, (int)Math.Min(count, _remaining));
-        if (read == 0) throw new EndOfStreamException("Unexpected end of stream while reading HTTP body");
+        _remaining -= read;
+        return read;
+    }
+
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationtoken) {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination");
+        if (count == 0 || _remaining <= 0) return 0;
+        int read = await _innerStream.ReadAsync(
+            buffer, offset, (int)Math.Min(count, _remaining), cancellationtoken
+        ).ConfigureAwait(false);
         _remaining -= read;
         return read;
     }

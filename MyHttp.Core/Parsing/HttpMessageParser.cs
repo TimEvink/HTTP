@@ -2,6 +2,9 @@ using System;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
 
 using MyHttp.Core.Exceptions;
 using MyHttp.Core.Messages;
@@ -26,7 +29,28 @@ public abstract class HttpMessageParser{
         _maxHeaderCount = maxHeaderCount;
     }
 
+    protected Stream GetBodyStream() {
+        return Stream.Null;
+    }
+
+
+
     protected string ReadLineWithLimit(int maxChars) {
+        //so we should first read bytes from _buffer and only after that continue reading from 
+
+
+        StringBuilder stringbuilder = new();
+        while (true) {
+            int c = _stream.ReadByte();
+            if (c == -1) throw new BadMessageException("Unexpected end of stream");
+            if (c == '\n') break;
+            if (c != '\r') stringbuilder.Append((char)c);
+            if (stringbuilder.Length > maxChars) throw new BadMessageException("Line too long");
+        }
+        return stringbuilder.ToString();
+    }
+
+    protected string ReadLineWIthLimitAsync(int maxChars, CancellationToken cancellationToken) {
         StringBuilder stringbuilder = new();
         while (true) {
             int c = _stream.ReadByte();

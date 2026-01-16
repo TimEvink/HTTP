@@ -9,13 +9,14 @@ using MyHttp.Core.Framing;
 namespace MyHttp.Core.Serialization;
 public abstract class HttpMessageSerializer {
     protected readonly Stream _stream;
-    protected HttpMessageSerializer(Stream stream) {
+    protected HttpMessageSerializer(Stream stream, Memory<byte> leftover) {
         _stream = stream;
     }
 
     protected void WriteAscii(string text) {
-        byte[] array = Encoding.ASCII.GetBytes(text);
-        _stream.Write(array, 0, array.Length);
+        ReadOnlySpan<byte> bytes = Encoding.ASCII.GetBytes(text);
+        _stream.Write(bytes);
+
     }
 
     protected void SerializeHeaders(IReadOnlyDictionary<string, string> headers) {

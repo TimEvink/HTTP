@@ -1,7 +1,10 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyHttp.Core.Framing;
+
 public sealed class ContentLengthDecodingStream : Stream {
     private readonly Stream _innerStream;
     private long _remaining;
@@ -24,13 +27,25 @@ public sealed class ContentLengthDecodingStream : Stream {
         return read;
     }
 
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination");
+        if (count == 0 || _remaining <= 0) return 0;
+        int read = await _innerStream.ReadAsync(
+            buffer, offset, (int)Math.Min(count, _remaining), cancellationToken
+        ).ConfigureAwait(false);
+        _remaining -= read;
+        return read;
+    }
+
     //required overrides
     public override bool CanRead => true;
     public override bool CanSeek => false;
     public override bool CanWrite => false;
     public override long Length => throw new NotSupportedException();
-    public override long Position
-    {
+    public override long Position {
         get => throw new NotSupportedException();
         set => throw new NotSupportedException();
     }
