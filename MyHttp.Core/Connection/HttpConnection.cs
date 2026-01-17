@@ -2,11 +2,11 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 using MyHttp.Core.Exceptions;
-using MyHttp.Core.Messages;
-using MyHttp.Core.Connection;
-using System.Collections.Generic;
+
+// NOTE: Quoted-string parsing intentionally not supported yet
 
 namespace MyHttp.Core.Connection;
 
@@ -27,6 +27,7 @@ internal abstract class HttpConnectionBase {
     const byte CR = 0x04; // '\r'
     const byte LF = 0x08; // '\n'
     const byte COLON = 0x10; // ':'
+    const byte COMMA = 0x20; // ','
 
     // number of bytes of importance currently in the buffer.
     private int ReadableBytes => _writePosition - _lineStart;
@@ -35,12 +36,8 @@ internal abstract class HttpConnectionBase {
     private int FreeBytes => _buffer.Length - _writePosition;
 
     static HttpConnectionBase() {
-        for (int i = 0x21; i < 0x7F; i++) {
-            if (i != ':' && i != '(' && i != ')' && i != '<' && i != '>' && i != '@' &&
-                i != ',' && i != ';' && i != '\\' && i != '"' && i != '/' && i != '[' &&
-                i != ']' && i != '?' && i != '=' && i != '{' && i != '}') {
-                CharClass[i] = TOKEN;
-            }
+        for (char i = '!'; i <= '~'; i++) {
+            if (":()<>@,;\\\"/[]?={}".IndexOf(i) == -1) CharClass[i] = TOKEN;
             CharClass[i] |= VALUE_OK;
         }
         CharClass['\r'] = CR;
@@ -48,6 +45,7 @@ internal abstract class HttpConnectionBase {
         CharClass['\t'] |= VALUE_OK;
         CharClass[' '] |= VALUE_OK;
         CharClass[':'] |= COLON;
+        CharClass[','] |= COMMA;
     }
 
     protected HttpConnectionBase(Stream stream, int buffersize = 16384, int maxheadersize = 4096, int maxheaderbytes = 32768) {
@@ -72,7 +70,8 @@ internal abstract class HttpConnectionBase {
             if (FreeBytes == 0) {
                 if (_lineStart > 0) {
                     Compactify();
-                } else {
+                }
+                else {
                     throw new InvalidOperationException("Buffer too small for incoming data");
                 }
             }
@@ -82,8 +81,9 @@ internal abstract class HttpConnectionBase {
         }
     }
 
-    private async ValueTask<LineInfo> ReadLineAsync() {
+    protected async ValueTask<(int, bool)> ReadLineAsync() {
         int colonOffset = -1;
+        bool hasComma = false;
         byte b, flags;
         while (true) {
             if (_readPosition == _writePosition) {
@@ -105,7 +105,8 @@ internal abstract class HttpConnectionBase {
             if ((flags & LF) != 0) throw new BadMessageException(@"LF not immediately following a CR.");
             //remaining bytes either part of header name or value
             if (colonOffset == -1) throw new BadMessageException("Invalid character in header name");
-            if (colonOffset != -1 && (flags & VALUE_OK) == 0) throw new BadMessageException("Invalid control character in header value");
+            if ((flags & VALUE_OK) == 0) throw new BadMessageException("Invalid control character in header value");
+            if ((flags & COMMA) != 0) hasComma = true;
         }
         //being here means we just saw a CR, so next byte has to be LF.
         if (_readPosition == _writePosition) {
@@ -117,7 +118,8 @@ internal abstract class HttpConnectionBase {
 
         _headerBytesRead += _readPosition - _lineStart;
         if (_headerBytesRead > _maxHeaderBytes) throw new BadMessageException("Total HTTP header size exceeded");
-        return new LineInfo(_lineStart, _readPosition - 2 - _lineStart, colonOffset);
+        // return new LineInfo(_readPosition - 2 - _lineStart, colonOffset, hasComma);
+        return (colonOffset, hasComma);
     }
 
     private static string NormalizeHeaderValue(ReadOnlySpan<byte> span) {
@@ -142,33 +144,59 @@ internal abstract class HttpConnectionBase {
         return Encoding.ASCII.GetString(normalized.Slice(0, j));
     }
 
-    //normalizes OWS of headervalue, ignores any form of comma seperation.
-    private async Task<(string, string)?> ParseHeaderAsync() {
-        LineInfo line = await ReadLineAsync().ConfigureAwait(false);
-        if (line.Length == 0) {
+    //normalizes OWS of headervalue.
+    private async Task<(string, string, bool)?> ParseHeaderAsync() {
+        // LineInfo line = await ReadLineAsync().ConfigureAwait(false);
+        var (colonOffset, hasComma) = await ReadLineAsync().ConfigureAwait(false);
+        int lineLength = _readPosition - 2 - _lineStart;
+        if (lineLength == 0) {
             //ownership transfer
             _lineStart = _readPosition;
             return null;
         }
-        if (line.ColonOffset <= 0) throw new BadMessageException("Header line missing ':'");
-        string name = Encoding.ASCII.GetString(_buffer, _lineStart, line.ColonOffset);
-        string value = NormalizeHeaderValue(_buffer.AsSpan(_lineStart + line.ColonOffset + 1, line.Length - line.ColonOffset - 1));
+        if (colonOffset == -1) throw new BadMessageException("Header line missing ':'");
+        string name = Encoding.ASCII.GetString(_buffer, _lineStart, colonOffset);
+        string value = NormalizeHeaderValue(_buffer.AsSpan(_lineStart + colonOffset + 1, lineLength - colonOffset - 1));
         //ownership transfer
         _lineStart = _readPosition;
-        return (name, value);
+        return (name, value, hasComma);
     }
 
-    protected async Task<List<(string, string)>> ParseHeadersAsync() {
-        var list = new List<(string, string)>();
+    //generates header name: value pairs (with normalized OWS for value) and also a flag indicating if a comma was found in the value.
+    private async IAsyncEnumerable<(string, string, bool)> ParseHeadersAsync() {
         while (true) {
-            (string, string)? pair = await ParseHeaderAsync().ConfigureAwait(false);
+            (string, string, bool)? pair = await ParseHeaderAsync().ConfigureAwait(false);
             if (pair == null) {
                 _headerBytesRead = 0;
-                return list;
+                break;
             }
-            var (name, value) = pair.Value;
-            list.Add((name, value));
+            yield return pair.Value;
         }
+    }
+
+    private static bool NeverSplitOnComma(string headername) {
+        return headername.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase);
+    }
+
+    //consumes the ParseHeadersAsync generator
+    protected async Task<Dictionary<string, List<string>>> ReadHeadersAsync() {
+        var headers = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        await foreach (var (name, value, hasComma) in ParseHeadersAsync().ConfigureAwait(false)) {
+            if (!headers.TryGetValue(name, out var list)) {
+                list = new List<string>();
+                headers[name] = list;
+            }
+            if (!hasComma || NeverSplitOnComma(name)) {
+                list.Add(value);
+            }
+            else {
+                foreach (var part in value.Split(',')) {
+                    string trimmed = part.Trim();
+                    if (trimmed.Length != 0) list.Add(trimmed);
+                }
+            }
+        }
+        return headers;
     }
 }
 
