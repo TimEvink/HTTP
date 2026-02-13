@@ -2,55 +2,32 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using MyHttp.Core.Connection;
 
 namespace MyHttp.Core.Framing;
 
-public sealed class ContentLengthDecodingStream : Stream {
-    private readonly Stream _innerStream;
+public sealed class ContentLengthDecodingStream : DecodingStream {
     private long _remaining;
-
-    public ContentLengthDecodingStream(Stream inner, long contentlength) {
-        if (inner == null) throw new ArgumentNullException(nameof(inner));
+    internal ContentLengthDecodingStream(HttpConnection connection, long contentlength) : base(connection) {
+        if (connection == null) throw new ArgumentNullException(nameof(connection));
         if (contentlength < 0) throw new ArgumentOutOfRangeException(nameof(contentlength), "Content length cannot be negative");
-        _innerStream = inner;
         _remaining = contentlength;
     }
 
-    public override int Read(byte[] buffer, int offset, int count) {
-        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
-        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
-        if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination");
-        if (count == 0 || _remaining <= 0) return 0;
-        int read = _innerStream.Read(buffer, offset, (int)Math.Min(count, _remaining));
-        _remaining -= read;
-        return read;
+    public override int Read(Span<byte> buffer) {
+        throw new NotImplementedException();
     }
 
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
-        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
-        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
-        if (buffer.Length - offset < count) throw new ArgumentException("Invalid offset/count combination");
-        if (count == 0 || _remaining <= 0) return 0;
-        int read = await _innerStream.ReadAsync(
-            buffer, offset, (int)Math.Min(count, _remaining), cancellationToken
-        ).ConfigureAwait(false);
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_remaining == 0 || buffer.Length == 0) return 0;
+        int toReadmax = Math.Min((int)_remaining, buffer.Length);
+        int read = await _connection.ReadBodyAsync(toReadmax, cancellationToken);
+        _connection._inputBuffer
+            .AsSpan(_connection._inputStart, read)
+            .CopyTo(buffer.Span);
         _remaining -= read;
+        _connection.UpdateInputStart();
         return read;
     }
-
-    //required overrides
-    public override bool CanRead => true;
-    public override bool CanSeek => false;
-    public override bool CanWrite => false;
-    public override long Length => throw new NotSupportedException();
-    public override long Position {
-        get => throw new NotSupportedException();
-        set => throw new NotSupportedException();
-    }
-    public override void Flush() { }
-    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-    public override void SetLength(long value) => throw new NotSupportedException();
-    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

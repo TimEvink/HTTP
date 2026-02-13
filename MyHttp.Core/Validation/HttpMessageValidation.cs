@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using MyHttp.Core.Exceptions;
@@ -15,7 +14,7 @@ public static class HttpMessageValidator {
     }
 
     //must only be called after another Validation step has verified that a body is present.
-    public static void ValidateBodyIndicators(IReadOnlyDictionary<string,string> headers) {
+    public static void ValidateBodyIndicators(IReadOnlyDictionary<string, string> headers) {
         bool hasTransferEncoding = headers.TryGetValue("transfer-encoding", out string? transferValue);
         bool hasContentLength = headers.TryGetValue("content-length", out string? contentValue);
         if (hasTransferEncoding && hasContentLength) {
