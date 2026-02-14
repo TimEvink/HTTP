@@ -95,16 +95,3 @@ dotnet run --project MyHttp.Server
 dotnet run --project MyHttp.Client
 ```
 This will trigger a single Request-Response cycle via `localhost:8000` with the Client writing to the Console the body of the response. A different port can be chosen by adding an optional port number to both commands.
-
-##
-
-## Changelog
-
-Current version: `v0.1.0`
-
-### v0.1.0
-- Initial working HTTP/1.1 pipeline
-- Manual parsing and serialization
-- `Content-Length` framing
-- End-to-end serialization → parsing tests for both `HttpRequest` and `HttpResponse`.
-- End-to-end client/server demo over TCP
