@@ -1,368 +1,205 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 using MyHttp.Core.Exceptions;
-using MyHttp.Core.Framing;
-using MyHttp.Core.Messages;
+
+// NOTE: Quoted-string parsing intentionally not supported yet
 
 namespace MyHttp.Core.Connection;
 
-//owns _stream.
-internal abstract class HttpConnection : IAsyncDisposable {
-    internal readonly Stream _stream;
-    private static readonly ReadOnlyMemoryByteComparer _comparer = new();
-
-    //input = bytes coming in from _stream reads.
-    internal byte[] _inputBuffer;
-	internal int _inputStart = 0;
-    protected int _inputCursor = 0;
-    protected int _inputEnd = 0;
-
-    //state invariants for _inputBuffer: _inputStart <= _inputCursor <= _inputEnd
-    //_inputStart is the index of oldest buffered byte of relevence; bytes to the left may be discarded.
-    //_inputCursor indicates the current parse scanning position on _inputBuffer.
-    //_inputEnd is the first free index available for incoming bytes; it is the offset used for writing to the buffer from the network stream.
-
-    private int TotalInputBytes => _inputEnd - _inputStart;
-    private int FreeInputBytes => _inputBuffer.Length - _inputEnd;
-
-    //output = bytes going out to _stream writes.
-    internal byte[] _outputBuffer;
-    protected int _outputEnd = 0;
-
-    internal int FreeOutputBytes => _outputBuffer.Length - _outputEnd;
-
-    protected readonly int _maxLineSize;
-    private readonly int _maxHeaderSize;
+internal abstract class HttpConnectionBase {
+    private readonly Stream _stream;
+    private byte[] _buffer;
+    private int _lineStart = 0;
+    private int _readPosition = 0;
+    private int _writePosition = 0;
+    private readonly int _maxHeaderLineSize;
+    private readonly int _maxHeaderBytes;
     private int _headerBytesRead;
-    protected static readonly byte[] CharClass = new byte[256];
+    private static readonly byte[] CharClass = new byte[256];
 
     //bit masks for faster parsing.
-    protected const byte TOKEN = 0x01; // tokens used for fast path.
-    protected const byte VALUE_OK = 0x02; // headervalue safe chars.
-    protected const byte CR = 0x04; // '\r'
-    protected const byte LF = 0x08; // '\n'
-    protected const byte COLON = 0x10; // ':'
-    protected const byte COMMA = 0x20; // ',' used to pass flag that a comma has been detected
-    protected const byte SPACE = 0x40; // ' ' used for parsing first line.
-    protected const byte READABLE = 0x80; // 
+    const byte TOKEN = 0x01; // tokens used for fast path.
+    const byte VALUE_OK = 0x02; // headervalue safe chars.
+    const byte CR = 0x04; // '\r'
+    const byte LF = 0x08; // '\n'
+    const byte COLON = 0x10; // ':'
+    const byte COMMA = 0x20; // ','
 
-    internal static readonly ReadOnlyMemory<byte> HTTP = " HTTP/"u8.ToArray();
-    internal static readonly ReadOnlyMemory<byte> CRLF = "\r\n"u8.ToArray();
-    private static readonly ReadOnlyMemory<byte> SetCookie = "Set-Cookie"u8.ToArray();
+    // number of bytes of importance currently in the buffer.
+    private int ReadableBytes => _writePosition - _lineStart;
 
-    static HttpConnection() {
+    // room in buffer for writing bytes read from the network stream.
+    private int FreeBytes => _buffer.Length - _writePosition;
+
+    static HttpConnectionBase() {
         for (char i = '!'; i <= '~'; i++) {
             if (":()<>@,;\\\"/[]?={}".IndexOf(i) == -1) CharClass[i] = TOKEN;
             CharClass[i] |= VALUE_OK;
-            CharClass[i] |= READABLE;
         }
         CharClass['\r'] = CR;
         CharClass['\n'] = LF;
         CharClass['\t'] |= VALUE_OK;
         CharClass[' '] |= VALUE_OK;
-        CharClass[' '] |= SPACE;
         CharClass[':'] |= COLON;
         CharClass[','] |= COMMA;
     }
 
-    protected HttpConnection(
-        Stream stream,
-        int inputBufferSize = 16384,
-        int outputBufferSize = 16384,
-        int maxLineSize = 4096,
-        int maxHeaderSize = 32768
-    ) {
-        if (stream == null) throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanRead || !stream.CanWrite) throw new ArgumentException("Stream must be readable and writable", nameof(stream));
-        if (inputBufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(inputBufferSize));
-        if (outputBufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(outputBufferSize));
-        if (maxLineSize <= 0) throw new ArgumentOutOfRangeException(nameof(maxLineSize));
-        if (maxLineSize > inputBufferSize) throw new ArgumentOutOfRangeException(nameof(maxLineSize), maxLineSize, "inputBufferSize must be at least maxLineSize");
-        if (maxLineSize > outputBufferSize) throw new ArgumentOutOfRangeException(nameof(maxLineSize), maxLineSize, "outputBufferSize must be at least maxLineSize");
-        if (maxHeaderSize <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeaderSize));
+    protected HttpConnectionBase(Stream stream, int buffersize = 16384, int maxheadersize = 4096, int maxheaderbytes = 32768) {
         _stream = stream;
-        _inputBuffer = new byte[inputBufferSize];
-        _outputBuffer = new byte[outputBufferSize];
-        _maxLineSize = maxLineSize;
-        _maxHeaderSize = maxHeaderSize;
+        _buffer = new byte[buffersize];
+        _maxHeaderLineSize = maxheadersize;
+        _maxHeaderBytes = maxheaderbytes;
     }
 
-    //removes consumed bytes from inputbuffer to make room for more input, shifting unread bytes & empty slots to the left.
-    private void CompactifyInput() {
-        Buffer.BlockCopy(_inputBuffer, _inputStart, _inputBuffer, 0, TotalInputBytes);
-        _inputEnd -= _inputStart;
-        _inputCursor -= _inputStart;
-        _inputStart = 0;
+    //removes consumed bytes from buffer to make room for another read, shifting unread bytes & empty slots to the left.
+    private void Compactify() {
+        Buffer.BlockCopy(_buffer, _lineStart, _buffer, 0, ReadableBytes);
+        _writePosition -= _lineStart;
+        _readPosition -= _lineStart;
+        _lineStart = 0;
     }
 
-	//ensures there are at least minBytes bytes available in the inputbuffer.
-	//the networkstream reads try to get as many bytes as possible without triggereing a CompactifyInput call.
-	internal async ValueTask EnsureInputAvailableAsync(int minBytes, CancellationToken cancellationToken) {
-		while (TotalInputBytes < minBytes) {
-			if (FreeInputBytes == 0) {
-				if (_inputStart > 0) {
-					CompactifyInput();
-				} else {
-					throw new InvalidOperationException("Inputvuffer too small for incoming data");
-				}
-			}
-			int read = await _stream.ReadAsync(_inputBuffer.AsMemory(_inputEnd, FreeInputBytes), cancellationToken).ConfigureAwait(false);
-			if (read == 0) throw new EndOfStreamException();
-			_inputEnd += read;
-		}
-	}
-
-	internal async ValueTask FlushOutputAsync(CancellationToken cancellationToken = default) {
-        if (_outputEnd == 0) return;
-        await _stream.WriteAsync(_outputBuffer.AsMemory(0, _outputEnd), cancellationToken).ConfigureAwait(false);
-        _outputEnd = 0;
-    }
-
-    public async ValueTask DisposeAsync() {
-        if (_outputEnd > 0) await FlushOutputAsync(CancellationToken.None).ConfigureAwait(false);
-        await _stream.DisposeAsync().ConfigureAwait(false);
-    }
-
-    internal async ValueTask WriteOutputAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken) {
-        if (data.Length > FreeOutputBytes) await FlushOutputAsync(cancellationToken);
-        if (data.Length > _outputBuffer.Length) {
-            await _stream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-        WriteOutput(data.Span);
-    }
-
-    //caller is responsible for ensuring that data.Length <= FreeOutputBytes.
-    internal void WriteOutput(ReadOnlySpan<byte> data) {
-        data.CopyTo(_outputBuffer.AsSpan(_outputEnd));
-        _outputEnd += data.Length;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    protected void WriteOutput(byte b)
-    {
-        _outputBuffer[_outputEnd++] = b;
-    }
-
-    protected static HttpVersion GetHttpVersion(ReadOnlySpan<byte> span) {
-        //Span must represent exactly "HTTP/X.Y". Throws otherwise.
-        if (span.Length != 8) throw new BadMessageException("Incorrect HTTP version syntax");
-        if (span[0] != (byte)'H' || span[1] != (byte)'T' || span[2] != (byte)'T' ||
-            span[3] != (byte)'P' || span[4] != (byte)'/' || span[6] != (byte)'.') {
-            throw new BadMessageException("Incorrect HTTP version syntax");
-        }
-        byte majorChar = span[5];
-        byte minorChar = span[7];
-        if ((uint)(majorChar - (byte)'0') > 9 || (uint)(minorChar - (byte)'0') > 9) {
-            throw new BadMessageException("HTTP version numbers must be digits");
-        }
-        return new HttpVersion(majorChar - (byte)'0', minorChar - (byte)'0');
-    }
-
-    protected DecodingStream getDecodingStream(FramingInfo info) {
-        return info.Method switch {
-            FramingMethod.CONTENTLENGTH => new ContentLengthDecodingStream(this, info.ContentLength),
-            FramingMethod.NONE => throw new ArgumentException("No decoding stream exists for an empty body"),
-            _ => throw new BadMessageException($"Framing method {info.Method} not supported")
-        };
-    }
-
-    protected EncodingStream getEncodingStream(FramingInfo info) {
-        return info.Method switch {
-            FramingMethod.CONTENTLENGTH => new ContentLengthEncodingStream(this, info.ContentLength),
-            FramingMethod.NONE => throw new ArgumentException("No decoding stream exists for an empty body"),
-            _ => throw new BadMessageException($"Framing method {info.Method} not supported")
-        };
-    }
-
-    protected async ValueTask SerializeHeadersAsync(HttpHeaders headers, CancellationToken cancellationToken) {
-        foreach (var (name, parts) in headers._raw) {
-            int lineLength = name.Length + 2 * (parts.Count + 1);
-            for (int i = 0; i < parts.Count; i++)
-                lineLength += parts[i].Length;
-            if (lineLength > FreeOutputBytes) await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
-            WriteOutput(name.Span);
-            WriteOutput(": "u8);
-            WriteOutput(parts[0].Span);
-            for (int i = 1; i < parts.Count; i++) {
-                WriteOutput(", "u8);
-                WriteOutput(parts[i].Span);
-            }
-            if (2 > FreeOutputBytes) await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
-            WriteOutput("\r\n"u8);
-        }
-		WriteOutput("\r\n"u8);
-	}
-
-    protected async ValueTask SerializeBodyAsync(FramingInfo info, Stream body, CancellationToken cancellationToken) {
-        switch (info.Method) {
-            case FramingMethod.CONTENTLENGTH:
-                long remaining = info.ContentLength;
-                while (remaining > 0) {
-                    if (FreeOutputBytes == 0) await FlushOutputAsync(cancellationToken);
-					int maxToRead = (int)Math.Min(FreeOutputBytes, remaining);
-					int read = await body.ReadAsync(_outputBuffer.AsMemory(_outputEnd, maxToRead));
-					_outputEnd += read;
-                    if (read == 0) throw new EndOfStreamException("Message body too small");
-                    remaining -= read;
+    //ensures there are at least minBytes bytes available in the buffer to be read.
+    private async ValueTask EnsureBufferedAsync(int minBytes) {
+        if (minBytes <= 0) return;
+        while (ReadableBytes < minBytes) {
+            if (FreeBytes == 0) {
+                if (_lineStart > 0) {
+                    Compactify();
                 }
-                break;
-            default:
-                throw new BadMessageException("Framing method not supported");
+                else {
+                    throw new InvalidOperationException("Buffer too small for incoming data");
+                }
+            }
+            int read = await _stream.ReadAsync(_buffer, _writePosition, FreeBytes).ConfigureAwait(false);
+            if (read == 0) throw new EndOfStreamException();
+            _writePosition += read;
         }
     }
 
-    //owns _inputCursor
-    private async ValueTask<(int, bool)?> ReadHeaderLineAsync(CancellationToken cancellationToken) {
+    protected async ValueTask<(int, bool)> ReadLineAsync() {
         int colonOffset = -1;
         bool hasComma = false;
-        byte b;
+        byte b, flags;
         while (true) {
-            if (_inputCursor == _inputEnd) {
-                if (_inputCursor - _inputStart >= _maxLineSize) throw new BadMessageException("Header line too long");
-                await EnsureInputAvailableAsync(1, cancellationToken).ConfigureAwait(false);
+            if (_readPosition == _writePosition) {
+                if (_readPosition - _lineStart >= _maxHeaderLineSize) throw new BadMessageException("Header line too long");
+                await EnsureBufferedAsync(1).ConfigureAwait(false);
             }
-            b = _inputBuffer[_inputCursor++];
-            byte flags = CharClass[b];
+            b = _buffer[_readPosition++];
+            flags = CharClass[b];
             //hot path
             if ((flags & TOKEN) != 0) continue;
             if ((flags & COLON) != 0) {
                 if (colonOffset == -1) {
-                    colonOffset = (_inputCursor - 1) - _inputStart;
-                    if (colonOffset == 0) throw new BadMessageException("Empty header name found; ':' first character on header line");
+                    colonOffset = (_readPosition - 1) - _lineStart;
+                    if (colonOffset == 0) throw new BadMessageException("Empty header name found; ':' first character on header line.");
                 }
                 continue;
             }
             if ((flags & CR) != 0) break;
-            if ((flags & LF) != 0) throw new BadMessageException(@"LF not immediately following a CR in header line");
+            if ((flags & LF) != 0) throw new BadMessageException(@"LF not immediately following a CR.");
             //remaining bytes either part of header name or value
             if (colonOffset == -1) throw new BadMessageException("Invalid character in header name");
             if ((flags & VALUE_OK) == 0) throw new BadMessageException("Invalid control character in header value");
             if ((flags & COMMA) != 0) hasComma = true;
         }
         //being here means we just saw a CR, so next byte has to be LF.
-        if (_inputCursor == _inputEnd) {
-            if (_inputCursor - _inputStart >= _maxLineSize) throw new BadMessageException("Header line too long");
-            await EnsureInputAvailableAsync(1, cancellationToken).ConfigureAwait(false);
+        if (_readPosition == _writePosition) {
+            if (_readPosition - _lineStart >= _maxHeaderLineSize) throw new BadMessageException("Header line too long");
+            await EnsureBufferedAsync(1).ConfigureAwait(false);
         }
-        b = _inputBuffer[_inputCursor++];
-        if ((CharClass[b] & LF) == 0) throw new BadMessageException(@"No LF following CR on header line");
+        b = _buffer[_readPosition++];
+        if ((CharClass[b] & LF) == 0) throw new BadMessageException(@"No LF following CR");
 
-        _headerBytesRead += _inputCursor - _inputStart;
-        if (_headerBytesRead > _maxHeaderSize) throw new BadMessageException("Total HTTP header size exceeded");
-        return _inputCursor == _inputStart + 2 ? null : (colonOffset, hasComma);
+        _headerBytesRead += _readPosition - _lineStart;
+        if (_headerBytesRead > _maxHeaderBytes) throw new BadMessageException("Total HTTP header size exceeded");
+        // return new LineInfo(_readPosition - 2 - _lineStart, colonOffset, hasComma);
+        return (colonOffset, hasComma);
     }
 
-    private static ReadOnlySpan<byte> Trim(ReadOnlySpan<byte> span) {
-        int start = 0;
-        int end = span.Length - 1;
-        while (start <= end && (span[start] == (byte)' ' || span[start] == (byte)'\t')) start++;
-        while (start <= end && (span[end] == (byte)' ' || span[end] == (byte)'\t')) end--;
-        return span.Slice(start, end - start + 1);
-    }
-
-    private static bool NeverSplitOnComma(string headername)
-        => headername.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase);
-    private bool NeverSplitOnComma(ReadOnlyMemory<byte> headername)
-        => _comparer.Equals(headername, SetCookie);
-
-    //for splitting a header value as span.
-    //separates on ',' and trims the parts.
-    //callback based as spans are incompatible with generators.
-    private static void SplitOnCommas(ReadOnlySpan<byte> span, Action<ReadOnlySpan<byte>> onElement) {
-        int tokenStart = -1;
-        int lastNonWhiteSpace = -1;
-        for (int i = 0; i < span.Length; i++) {
+    private static string NormalizeHeaderValue(ReadOnlySpan<byte> span) {
+        int len = span.Length;
+        int i = 0;
+        while (i < len && (span[i] == (byte)' ' || span[i] == (byte)'\t')) i++;
+        if (i == len) return string.Empty;
+        Span<byte> normalized = stackalloc byte[len];
+        int j = 0;
+        bool inWhitespace = false;
+        for (; i < len; i++) {
             byte b = span[i];
-            if (b == (byte)',') {
-                if (lastNonWhiteSpace >= tokenStart) {
-                    onElement(span.Slice(tokenStart, lastNonWhiteSpace - tokenStart + 1));
-                }
-                //reset
-                tokenStart = i + 1;
-                lastNonWhiteSpace = tokenStart - 1;
-            } else {
-                if (b != (byte)' ' && b != (byte)'\t') lastNonWhiteSpace = i;
+            if (b == (byte)' ' || b == (byte)'\t') {
+                inWhitespace = true;
+            }
+            else {
+                if (inWhitespace && j > 0) normalized[j++] = (byte)' ';
+                normalized[j++] = b;
+                inWhitespace = false;
             }
         }
-        // emit last token
-        if (lastNonWhiteSpace >= tokenStart) {
-            onElement(span.Slice(tokenStart, lastNonWhiteSpace - tokenStart + 1));
-        }
+        return Encoding.ASCII.GetString(normalized.Slice(0, j));
     }
 
-    //owns _inputStart and _headerBytesRead reset.
-    //iteration usage will automatically have the colonOffset relative to the correct _linestart
-    private async IAsyncEnumerable<(int, bool)> ReadHeadersAsync([EnumeratorCancellation] CancellationToken cancellationToken) {
+    //normalizes OWS of headervalue.
+    private async Task<(string, string, bool)?> ParseHeaderAsync() {
+        // LineInfo line = await ReadLineAsync().ConfigureAwait(false);
+        var (colonOffset, hasComma) = await ReadLineAsync().ConfigureAwait(false);
+        int lineLength = _readPosition - 2 - _lineStart;
+        if (lineLength == 0) {
+            //ownership transfer
+            _lineStart = _readPosition;
+            return null;
+        }
+        if (colonOffset == -1) throw new BadMessageException("Header line missing ':'");
+        string name = Encoding.ASCII.GetString(_buffer, _lineStart, colonOffset);
+        string value = NormalizeHeaderValue(_buffer.AsSpan(_lineStart + colonOffset + 1, lineLength - colonOffset - 1));
+        //ownership transfer
+        _lineStart = _readPosition;
+        return (name, value, hasComma);
+    }
+
+    //generates header name: value pairs (with normalized OWS for value) and also a flag indicating if a comma was found in the value.
+    private async IAsyncEnumerable<(string, string, bool)> ParseHeadersAsync() {
         while (true) {
-            (int, bool)? lineData = await ReadHeaderLineAsync(cancellationToken).ConfigureAwait(false);
-            if (lineData == null) {
-                _inputStart = _inputCursor;
+            (string, string, bool)? pair = await ParseHeaderAsync().ConfigureAwait(false);
+            if (pair == null) {
                 _headerBytesRead = 0;
                 break;
             }
-            yield return lineData.Value;
-            _inputStart = _inputCursor;
+            yield return pair.Value;
         }
     }
 
-    // NOTE: Quoted-string parsing intentionally not supported.
-    // Consequently, if a header name allows comma separated values, the parser will separate the corresponding raw header value regardless of quotes surrounding commas.
-    protected async ValueTask<IReadOnlyDictionary<string, List<string>>> ParseHeadersAsync() {
+    private static bool NeverSplitOnComma(string headername) {
+        return headername.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase);
+    }
+
+    //consumes the ParseHeadersAsync generator
+    protected async Task<Dictionary<string, List<string>>> ReadHeadersAsync() {
         var headers = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        await foreach ((int colonOffset, bool hasComma) in ReadHeadersAsync(CancellationToken.None).ConfigureAwait(false)) {
-            string name = Encoding.ASCII.GetString(_inputBuffer.AsSpan(_inputStart, colonOffset));
-            ReadOnlySpan<byte> valueTrimmed = Trim(_inputBuffer.AsSpan(_inputStart + colonOffset + 1, _inputCursor - _inputStart - 3 - colonOffset));
+        await foreach (var (name, value, hasComma) in ParseHeadersAsync().ConfigureAwait(false)) {
             if (!headers.TryGetValue(name, out var list)) {
                 list = new List<string>();
                 headers[name] = list;
             }
             if (!hasComma || NeverSplitOnComma(name)) {
-                list.Add(Encoding.ASCII.GetString(valueTrimmed));
-            } else {
-                SplitOnCommas(valueTrimmed, part => list.Add(Encoding.ASCII.GetString(part)));
+                list.Add(value);
+            }
+            else {
+                foreach (var part in value.Split(',')) {
+                    string trimmed = part.Trim();
+                    if (trimmed.Length != 0) list.Add(trimmed);
+                }
             }
         }
         return headers;
     }
-
-    protected async ValueTask<HttpHeaders> ParseHeadersAsync(CancellationToken cancellationToken) {
-        var headers = new Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>>(_comparer);
-        await foreach ((int colonOffset, bool hasComma) in ReadHeadersAsync(cancellationToken).ConfigureAwait(false)) {
-            Memory<byte> name = _inputBuffer.AsMemory(_inputStart, colonOffset);
-            ReadOnlySpan<byte> valueTrimmed = Trim(_inputBuffer.AsSpan(_inputStart + colonOffset + 1, _inputCursor - _inputStart - 3 - colonOffset));
-            if (!headers.TryGetValue(name, out var list)) {
-                list = new List<ReadOnlyMemory<byte>>();
-                headers[name] = list;
-            }
-            if (!hasComma || NeverSplitOnComma(name)) {
-                list.Add(valueTrimmed.ToArray());
-            } else {
-                SplitOnCommas(valueTrimmed, part => list.Add(part.ToArray()));
-            }
-        }
-        return new HttpHeaders(headers);
-    }
-
-    //advances _inputCursor for body reading.
-    internal async ValueTask<int> ReadBodyAsync(int maxBytes, CancellationToken cancellationToken) {
-        if (_inputCursor == _inputEnd) {
-            await EnsureInputAvailableAsync(1, cancellationToken).ConfigureAwait(false);
-        }
-        int available = _inputEnd - _inputCursor;
-        int toRead = Math.Min(available, maxBytes);
-        _inputCursor += toRead;
-        return toRead;
-    }
-
-    internal void UpdateInputStart() {
-        _inputStart = _inputCursor;
-    }
 }
+
+
+
+//        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

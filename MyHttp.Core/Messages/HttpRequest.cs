@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Messages;
-
 public sealed class HttpRequest : HttpMessage {
     public HttpMethod Method { get; }
     public HttpRequestTarget Target { get; }
@@ -12,9 +11,9 @@ public sealed class HttpRequest : HttpMessage {
         HttpMethod method,
         HttpRequestTarget target,
         HttpVersion version,
-        HttpHeaders headers,
+        Dictionary<string, string> headers,
         Stream body
-    ) : base(version, headers, body) {
+    ) : base(version, headers, body){
         Method = method;
         Target = target;
     }

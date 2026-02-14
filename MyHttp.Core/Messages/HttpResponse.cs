@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Messages;
-
 public sealed class HttpResponse : HttpMessage {
     public int StatusCode { get; }
     public string Message { get; }
@@ -11,7 +10,7 @@ public sealed class HttpResponse : HttpMessage {
         HttpVersion version,
         int statuscode,
         string message,
-        HttpHeaders headers,
+        Dictionary<string, string> headers,
         Stream body
     ) : base(version, headers, body) {
         StatusCode = statuscode;
