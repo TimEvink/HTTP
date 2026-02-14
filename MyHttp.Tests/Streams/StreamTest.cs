@@ -4,11 +4,8 @@ using System.Text;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-
 using MyHttp.Core.Connection;
 using MyHttp.Core.Messages;
-using System.Threading;
-using System.Linq;
 
 namespace MyHttp.Tests.Streams;
 
