@@ -1,14 +1,15 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 using MyHttp.Core.Exceptions;
-using MyHttp.Core.Messages;
 using MyHttp.Core.Framing;
-using System.Runtime.CompilerServices;
+using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Connection;
 
@@ -19,7 +20,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
 
     //input = bytes coming in from _stream reads.
     internal byte[] _inputBuffer;
-    internal int _inputStart = 0;
+	internal int _inputStart = 0;
     protected int _inputCursor = 0;
     protected int _inputEnd = 0;
 
@@ -118,7 +119,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
 		}
 	}
 
-	internal async ValueTask FlushOutputAsync(CancellationToken cancellationToken) {
+	internal async ValueTask FlushOutputAsync(CancellationToken cancellationToken = default) {
         if (_outputEnd == 0) return;
         await _stream.WriteAsync(_outputBuffer.AsMemory(0, _outputEnd), cancellationToken).ConfigureAwait(false);
         _outputEnd = 0;
@@ -197,7 +198,8 @@ internal abstract class HttpConnection : IAsyncDisposable {
             if (2 > FreeOutputBytes) await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
             WriteOutput("\r\n"u8);
         }
-    }
+		WriteOutput("\r\n"u8);
+	}
 
     protected async ValueTask SerializeBodyAsync(FramingInfo info, Stream body, CancellationToken cancellationToken) {
         switch (info.Method) {
@@ -205,7 +207,8 @@ internal abstract class HttpConnection : IAsyncDisposable {
                 long remaining = info.ContentLength;
                 while (remaining > 0) {
                     if (FreeOutputBytes == 0) await FlushOutputAsync(cancellationToken);
-                    int read = await body.ReadAsync(_outputBuffer.AsMemory(_outputEnd, (int)Math.Min(FreeOutputBytes, remaining)));
+					int maxToRead = (int)Math.Min(FreeOutputBytes, remaining);
+					int read = await body.ReadAsync(_outputBuffer.AsMemory(_outputEnd, maxToRead));
 					_outputEnd += read;
                     if (read == 0) throw new EndOfStreamException("Message body too small");
                     remaining -= read;

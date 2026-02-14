@@ -44,7 +44,7 @@ internal sealed class HttpClientConnection : HttpConnection {
     }
 
     //does not flush automatically.
-    internal async ValueTask SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken) {
+    internal async ValueTask SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
         await SerializeRequestLineAsync(request.Method, request.Target, request.Version, cancellationToken).ConfigureAwait(false);
         await SerializeHeadersAsync(request.Headers, cancellationToken).ConfigureAwait(false);
         if (request.Body == Stream.Null) return;

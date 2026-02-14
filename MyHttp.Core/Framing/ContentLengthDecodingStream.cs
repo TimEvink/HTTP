@@ -18,7 +18,7 @@ public sealed class ContentLengthDecodingStream : DecodingStream {
         throw new NotImplementedException();
     }
 
-    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) {
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         if (_remaining == 0 || buffer.Length == 0) return 0;
         int toReadmax = Math.Min((int)_remaining, buffer.Length);

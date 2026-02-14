@@ -99,7 +99,7 @@ internal sealed class HttpServerConnection : HttpConnection {
         return (method, target, version);
     }
 
-    internal async Task<HttpRequest> ParseRequestAsync(CancellationToken cancellationToken) {
+    internal async Task<HttpRequest> ParseRequestAsync(CancellationToken cancellationToken = default) {
         var (method, target, version) = await ParseRequestLineAsync(cancellationToken).ConfigureAwait(false);
         HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
         FramingInfo info = headers.GetFramingInfo();
