@@ -7,7 +7,7 @@ public sealed class HttpRequestTarget {
     private string? _cachedUrl;
 
     public string RawUrl => _cachedUrl ??= Encoding.ASCII.GetString(_rawUrl.Span);
-    public HttpRequestTarget(ReadOnlyMemory<byte> rawUrl) {
+    internal HttpRequestTarget(ReadOnlyMemory<byte> rawUrl) {
         _rawUrl = rawUrl;
     }
 }

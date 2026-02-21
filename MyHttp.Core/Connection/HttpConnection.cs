@@ -4,7 +4,6 @@ using System.Text;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 using MyHttp.Core.Exceptions;
@@ -41,37 +40,50 @@ internal abstract class HttpConnection : IAsyncDisposable {
     protected readonly int _maxLineSize;
     private readonly int _maxHeaderSize;
     private int _headerBytesRead;
+
     protected static readonly byte[] CharClass = new byte[256];
 
     //bit masks for faster parsing.
     protected const byte TOKEN = 0x01; // tokens used for fast path.
-    protected const byte VALUE_OK = 0x02; // headervalue safe chars.
-    protected const byte CR = 0x04; // '\r'
-    protected const byte LF = 0x08; // '\n'
-    protected const byte COLON = 0x10; // ':'
-    protected const byte COMMA = 0x20; // ',' used to pass flag that a comma has been detected
-    protected const byte SPACE = 0x40; // ' ' used for parsing first line.
-    protected const byte READABLE = 0x80; // 
+    protected const byte VALUE_OK = 0x02; // headervalue safe chars. Also used for valid reason messages in response line.
+    protected const byte READABLE = 0x04; 
+	protected const byte URI = 0x08; // uri chars used for fast path.
+	protected const byte HEX = 0x10; // used for (case-insenstive) hex chars for uri % encoding.
 
-    internal static readonly ReadOnlyMemory<byte> HTTP = " HTTP/"u8.ToArray();
-    internal static readonly ReadOnlyMemory<byte> CRLF = "\r\n"u8.ToArray();
-    private static readonly ReadOnlyMemory<byte> SetCookie = "Set-Cookie"u8.ToArray();
+	//const bytes/sequences of bytes.
+	protected const byte LF = 0xa; // '\n'
+	protected const byte CR = 0xd; // '\r'
+	protected const byte SPACE = 0x20; // ' '
+	protected const byte PERCENT = 0x25; // '%'
+	protected const byte COMMA = 0x2c; // ','
+	protected const byte DOT = 0x2e; // '.'
+	protected const byte SLASH = 0x2f; // '/'
+	protected const byte COLON = 0x3a; // ':'
+	protected const byte H = 0x48; // 'H'
+	protected const byte P = 0x50; // 'P'
+	protected const byte T = 0x54; // 'T'
 
+	internal static readonly ReadOnlyMemory<byte> HTTP = "HTTP/"u8.ToArray();
+	private static readonly ReadOnlyMemory<byte> SetCookie = "Set-Cookie"u8.ToArray();
+
+	//initialize byte array for bit masking.
     static HttpConnection() {
-        for (char i = '!'; i <= '~'; i++) {
-            if (":()<>@,;\\\"/[]?={}".IndexOf(i) == -1) CharClass[i] = TOKEN;
-            CharClass[i] |= VALUE_OK;
-            CharClass[i] |= READABLE;
+        for (char c = '!'; c <= '~'; c++) {
+            if (!":()<>@,;\\\"/[]?={}".Contains(c))
+				CharClass[c] = TOKEN;
+			if (!"\"%<>\\^`{|}".Contains(c))
+				CharClass[c] |= URI;
+            CharClass[c] |= VALUE_OK;
+            CharClass[c] |= READABLE;
         }
-        CharClass['\r'] = CR;
-        CharClass['\n'] = LF;
-        CharClass['\t'] |= VALUE_OK;
-        CharClass[' '] |= VALUE_OK;
-        CharClass[' '] |= SPACE;
-        CharClass[':'] |= COLON;
-        CharClass[','] |= COMMA;
-    }
 
+		for (char c = '0'; c <= '9'; c++) CharClass[c] |= HEX;
+		for (char c = 'A'; c <= 'F'; c++) CharClass[c] |= HEX;
+		for (char c = 'a'; c <= 'f'; c++) CharClass[c] |= HEX;
+
+		CharClass['\t'] |= VALUE_OK;
+        CharClass[' '] |= VALUE_OK;
+	}
     protected HttpConnection(
         Stream stream,
         int inputBufferSize = 16384,
@@ -233,19 +245,19 @@ internal abstract class HttpConnection : IAsyncDisposable {
             byte flags = CharClass[b];
             //hot path
             if ((flags & TOKEN) != 0) continue;
-            if ((flags & COLON) != 0) {
+            if (b == COLON) {
                 if (colonOffset == -1) {
                     colonOffset = (_inputCursor - 1) - _inputStart;
                     if (colonOffset == 0) throw new BadMessageException("Empty header name found; ':' first character on header line");
                 }
                 continue;
             }
-            if ((flags & CR) != 0) break;
-            if ((flags & LF) != 0) throw new BadMessageException(@"LF not immediately following a CR in header line");
+            if (b == CR) break;
+            if (b == LF) throw new BadMessageException(@"LF not immediately following a CR in header line");
             //remaining bytes either part of header name or value
             if (colonOffset == -1) throw new BadMessageException("Invalid character in header name");
             if ((flags & VALUE_OK) == 0) throw new BadMessageException("Invalid control character in header value");
-            if ((flags & COMMA) != 0) hasComma = true;
+            if (b == COMMA) hasComma = true;
         }
         //being here means we just saw a CR, so next byte has to be LF.
         if (_inputCursor == _inputEnd) {
@@ -253,7 +265,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
             await EnsureInputAvailableAsync(1, cancellationToken).ConfigureAwait(false);
         }
         b = _inputBuffer[_inputCursor++];
-        if ((CharClass[b] & LF) == 0) throw new BadMessageException(@"No LF following CR on header line");
+        if (b != LF) throw new BadMessageException(@"No LF following CR on header line");
 
         _headerBytesRead += _inputCursor - _inputStart;
         if (_headerBytesRead > _maxHeaderSize) throw new BadMessageException("Total HTTP header size exceeded");
