@@ -76,18 +76,14 @@ public sealed class HttpHeaders : IReadOnlyDictionary<string, string[]> {
 
     internal FramingInfo GetFramingInfo() {
         if (this.TryGetValue("Transfer-Encoding", out string[]? encodingraw)) {
-            string encoding = encodingraw[0];
-            switch (encoding) {
-                case "chunked":
-                    return FramingInfo.FromChunked();
-                default:
-                    throw new BadMessageException("Unsupported Transfer-Encoding value found");
-            }
+			return encodingraw.Length != 0 && encodingraw[0].Equals("chunked", StringComparison.OrdinalIgnoreCase)
+				? FramingInfo.FromChunked()
+				: throw new BadMessageException("Unsupported Transfer-Encoding value found");
         }
         if (this.TryGetValue("Content-Length", out string[]? listraw)) {
             if (long.TryParse(listraw[0], out long length)) return FramingInfo.FromContentLength(length);
+			throw new BadMessageException("Content-Length not a valid 64 bit signed integer");
         }
-        var test = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         return FramingInfo.FromNone();
     }
 }

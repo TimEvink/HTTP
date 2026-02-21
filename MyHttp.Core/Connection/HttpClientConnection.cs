@@ -67,7 +67,7 @@ internal sealed class HttpClientConnection : HttpConnection {
 		if (b != SPACE) throw new BadResponseException("Space character must follow HTTP version");
 
 		//status code
-		HttpStatusCode statusCode = new (b, _inputBuffer[_inputCursor + 1], _inputBuffer[_inputCursor + 2]);
+		HttpStatusCode statusCode = new (_inputBuffer[_inputCursor], _inputBuffer[_inputCursor + 1], _inputBuffer[_inputCursor + 2]);
 		_inputCursor += 3;
 
 		//space
@@ -93,6 +93,9 @@ internal sealed class HttpClientConnection : HttpConnection {
 		int reasonStart = _inputStart + spaceOffset + 1;
 		int reasonLength = _inputCursor - 1 - reasonStart;
 		HttpReason reason = new(_inputBuffer.AsMemory(reasonStart, reasonLength));
+
+		//transfer ownership
+		_inputStart = _inputCursor;
 
 		return (version, statusCode, reason);
 	}

@@ -182,15 +182,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
         return info.Method switch {
             FramingMethod.CONTENTLENGTH => new ContentLengthDecodingStream(this, info.ContentLength),
             FramingMethod.NONE => throw new ArgumentException("No decoding stream exists for an empty body"),
-            _ => throw new BadMessageException($"Framing method {info.Method} not supported")
-        };
-    }
-
-    protected EncodingStream getEncodingStream(FramingInfo info) {
-        return info.Method switch {
-            FramingMethod.CONTENTLENGTH => new ContentLengthEncodingStream(this, info.ContentLength),
-            FramingMethod.NONE => throw new ArgumentException("No decoding stream exists for an empty body"),
-            _ => throw new BadMessageException($"Framing method {info.Method} not supported")
+            _ => throw new NotSupportedException($"Framing method {info.Method} not supported")
         };
     }
 
@@ -280,9 +272,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
         return span.Slice(start, end - start + 1);
     }
 
-    private static bool NeverSplitOnComma(string headername)
-        => headername.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase);
-    private bool NeverSplitOnComma(ReadOnlyMemory<byte> headername)
+    private static bool NeverSplitOnComma(ReadOnlyMemory<byte> headername)
         => _comparer.Equals(headername, SetCookie);
 
     //for splitting a header value as span.
@@ -325,27 +315,9 @@ internal abstract class HttpConnection : IAsyncDisposable {
         }
     }
 
-    // NOTE: Quoted-string parsing intentionally not supported.
-    // Consequently, if a header name allows comma separated values, the parser will separate the corresponding raw header value regardless of quotes surrounding commas.
-    protected async ValueTask<IReadOnlyDictionary<string, List<string>>> ParseHeadersAsync() {
-        var headers = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        await foreach ((int colonOffset, bool hasComma) in ReadHeadersAsync(CancellationToken.None).ConfigureAwait(false)) {
-            string name = Encoding.ASCII.GetString(_inputBuffer.AsSpan(_inputStart, colonOffset));
-            ReadOnlySpan<byte> valueTrimmed = Trim(_inputBuffer.AsSpan(_inputStart + colonOffset + 1, _inputCursor - _inputStart - 3 - colonOffset));
-            if (!headers.TryGetValue(name, out var list)) {
-                list = new List<string>();
-                headers[name] = list;
-            }
-            if (!hasComma || NeverSplitOnComma(name)) {
-                list.Add(Encoding.ASCII.GetString(valueTrimmed));
-            } else {
-                SplitOnCommas(valueTrimmed, part => list.Add(Encoding.ASCII.GetString(part)));
-            }
-        }
-        return headers;
-    }
-
-    protected async ValueTask<HttpHeaders> ParseHeadersAsync(CancellationToken cancellationToken) {
+	// NOTE: Quoted-string parsing intentionally not supported.
+	// Consequently, if a header name allows comma separated values, the parser will separate the corresponding raw header value regardless of quotes surrounding commas.
+	protected async ValueTask<HttpHeaders> ParseHeadersAsync(CancellationToken cancellationToken) {
         var headers = new Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>>(_comparer);
         await foreach ((int colonOffset, bool hasComma) in ReadHeadersAsync(cancellationToken).ConfigureAwait(false)) {
             Memory<byte> name = _inputBuffer.AsMemory(_inputStart, colonOffset);

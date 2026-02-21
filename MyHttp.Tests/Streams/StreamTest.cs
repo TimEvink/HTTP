@@ -1,85 +1,92 @@
-using System;
-using System.IO;
-using System.Text;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
+using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.DataCollection;
 using MyHttp.Core.Connection;
 using MyHttp.Core.Messages;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace MyHttp.Tests.Streams;
 
 public class StreamsTest {
-    [Fact]
-    public async Task HttpRequestSerializeParseTest() {
-        //build a simple clientside POST request
-        string message = "Hi there Http!";
 
+	private readonly ReadOnlyMemoryByteComparer _comparer = new();
+
+	[Fact]
+	public async Task HttpRequestSerializeParseTest() {
+		//build a simple clientside POST request
+		string messageIn = "Hi there Http!";
+
+		HttpMethod method = HttpMethod.POST;
+		HttpRequestTarget target = new("/"u8.ToArray());
 		HttpVersion version = new(1, 1);
-        HttpRequestTarget target = new("/"u8.ToArray());
-        Dictionary<ReadOnlyMemory<byte>,List<ReadOnlyMemory<byte>>> headersRaw = new(new ReadOnlyMemoryByteComparer()) {
+		Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>> headersRaw = new(_comparer) {
 			{ "Host"u8.ToArray(), new List<ReadOnlyMemory<byte>>(1) { "localhost"u8.ToArray() } },
-			{ "Content-Length"u8.ToArray(), new List<ReadOnlyMemory<byte>>(1) { Encoding.ASCII.GetBytes(message.Length.ToString()) } }
+			{ "Content-Length"u8.ToArray(), new List<ReadOnlyMemory<byte>>(1) { Encoding.ASCII.GetBytes(messageIn.Length.ToString()) } }
 		};
-        HttpHeaders headers = new(headersRaw);
+		HttpHeaders headers = new(headersRaw);
+		Stream body = new MemoryStream(Encoding.ASCII.GetBytes(messageIn));
 
-		Stream body = new MemoryStream(Encoding.ASCII.GetBytes(message));
-        HttpRequest requestin = new(HttpMethod.POST, target, version, headers, body);
+		HttpRequest requestIn = new(method, target, version, headers, body);
 
-        //mimic a NetworkStream from TCP connection using a MemoryStream.
-        MemoryStream wireStream = new(10000);
-        var clientConnection = new HttpClientConnection(wireStream);
-        var serverConnection = new HttpServerConnection(wireStream);
+		//mimic a NetworkStream from TCP connection using a MemoryStream.
+		MemoryStream wireStream = new(1000);
+		var clientConnection = new HttpClientConnection(wireStream);
+		var serverConnection = new HttpServerConnection(wireStream);
 
-        //serialize
-        await clientConnection.SerializeRequestAsync(requestin);
+		//serialize
+		await clientConnection.SerializeRequestAsync(requestIn);
 		await clientConnection.FlushOutputAsync();
 
-        //reset 'wireStream' to allow reading by server.
-        wireStream.Position = 0;
+		//reset wireStream to allow reading by server.
+		wireStream.Position = 0;
 
-        //parse
-        HttpRequest requestout = await serverConnection.ParseRequestAsync();
+		//parse
+		HttpRequest requestOut = await serverConnection.ParseRequestAsync();
 
-        //consume the body to retrieve message and compare with original.
-        using (StreamReader reader = new(requestout.Body)) {
-            string messageout = await reader.ReadToEndAsync();
-            Assert.Equal(message, messageout);
-        }
-    }
+		//consume the body to retrieve message and compare with original.
+		using StreamReader reader = new(requestOut.Body);
+		string messageOut = await reader.ReadToEndAsync();
+		Assert.Equal(messageIn, messageOut);
+	}
+
+
+	[Fact]
+	public async Task HttpResponseSerializeParseTest() {
+		//build a serverside response.
+		string messageIn = "Hi there back, Http!";
+
+		HttpVersion version = new(1, 1);
+		HttpStatusCode statusCode = new((byte)'2', (byte)'0', (byte)'0');
+		HttpReason reason = new("OK");
+		Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>> headersRaw = new(_comparer) {
+			{ "Content-Length"u8.ToArray(), new List<ReadOnlyMemory<byte>>(1) { Encoding.ASCII.GetBytes(messageIn.Length.ToString()) } }
+		};
+		HttpHeaders headers = new(headersRaw);
+		Stream body = new MemoryStream(Encoding.ASCII.GetBytes(messageIn));
+
+		HttpResponse responseIn = new(version, statusCode, reason, headers, body);
+
+		//mimic a NetworkStream from TCP connection using a MemoryStream.
+		MemoryStream wireStream = new(1000);
+		var clientConnection = new HttpClientConnection(wireStream);
+		var serverConnection = new HttpServerConnection(wireStream);
+
+		//serialize
+		await serverConnection.SerializeResponseAsync(responseIn);
+		await serverConnection.FlushOutputAsync();
+
+		//reset wireStream to allow reading by server.
+		wireStream.Position = 0;
+
+		//parse
+		HttpResponse responseOut = await clientConnection.ParseResponseAsync();
+
+		//consume the body to retrieve messageOut and compare with original (messageIn)
+		using StreamReader reader = new(responseOut.Body);
+		string messageOut = await reader.ReadToEndAsync();
+		Assert.Equal(messageIn, messageOut);
+	}
 }
-
-    // [Fact]
-    // public void HttpResponseSerializeParseTest() {
-    //     //build a serverside response.
-    //     string messagein = "Hi there back, Http!";
-
-    //     HttpVersion version = new(1, 1);
-    //     int statuscode = 200;
-    //     string message = "OK";
-    //     Dictionary<string, string> headers = new();
-    //     headers.Add("Content-Length", messagein.Length.ToString());
-    //     Stream body = new MemoryStream(Encoding.UTF8.GetBytes(messagein));
-    //     HttpResponse responsein = new(version, statuscode, message, headers, body);
-
-    //     //mimic a NetworkStream from TCP connection using a MemoryStream.
-    //     MemoryStream wireStream = new(100);
-
-    //     //serialize
-    //     HttpResponseSerializer serializer = new(wireStream);
-    //     serializer.Serialize(responsein);
-
-    //     //reset 'wireStream' to allow reading by client.
-    //     wireStream.Position = 0;
-
-    //     //parse
-    //     HttpResponseParser parser = new(wireStream);
-    //     HttpResponse responseout = parser.Parse();
-
-    //     //consume the body to retrieve messageout and compare with original (messagein)
-    //     using (StreamReader reader = new(responseout.Body)) {
-    //         string messageout = reader.ReadToEnd();
-    //         Assert.Equal(messagein, messageout);
-    //     }
-    // }
-

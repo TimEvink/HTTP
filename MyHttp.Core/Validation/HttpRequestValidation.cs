@@ -5,11 +5,9 @@ using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Validation;
 public static class HttpRequestValidator {
-
     public static void ValidateHost(HttpRequest message) {
-        if (!message.Headers.ContainsKey("Host")) {
+        if (!message.Headers._raw.ContainsKey("Host"u8.ToArray())) 
             throw new BadRequestException("required header name missing: Host");
-        }
     }
 
     public static void Validate(HttpRequest message) {
