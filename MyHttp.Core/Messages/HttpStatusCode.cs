@@ -8,7 +8,7 @@ namespace MyHttp.Core.Messages {
 		internal readonly byte b1;
 		internal readonly byte b2;
 
-		internal HttpStatusCode(byte b0, byte b1, byte b2) {
+		public HttpStatusCode(byte b0, byte b1, byte b2) {
 			if ((uint)(b0 - (byte)'2') > 3)
 				throw new BadResponseException("First status code digit must be in range 2-5");
 

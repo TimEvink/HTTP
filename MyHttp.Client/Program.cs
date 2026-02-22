@@ -6,28 +6,36 @@ using System.Net.Sockets;
 
 using MyHttp.Client;
 using MyHttp.Core.Messages;
+using MyHttp.Core.Connection;
+using System.Threading.Tasks;
 
 namespace MyHttp.Client;
 static class Program {
-    static void Main(string[] args) {
-        // int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000; 
+	static async Task Main(string[] args) {
+		int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000;
 
-        // using TcpClient client = new TcpClient("127.0.0.1", port);
-        // using NetworkStream stream = client.GetStream();
+		using TcpClient client = new("127.0.0.1", port);
+		using NetworkStream stream = client.GetStream();
 
-        // //example request
-        // HttpRequest request = Requests.DefaultGet();
+		HttpClientConnection connection = new(stream);
 
-        // //send request
-        // new HttpRequestSerializer(stream).Serialize(request);
 
-        // //read response
-        // HttpResponse response = new HttpResponseParser(stream).Parse();
+		//example good request
+		Console.WriteLine("Sending HTTP request...");
+		HttpRequest request = Requests.Get();
 
-        // using StreamReader reader = new(response.Body, Encoding.UTF8);
-        // string body = reader.ReadToEnd();
+		//send request
+		await connection.SerializeRequestAsync(request);
+		await connection.FlushOutputAsync();
 
-        // Console.WriteLine($"Http Request recieved: {response.StatusCode} {response.Message}");
-        // Console.WriteLine($"Body: {body}");
-    }
+		//read response
+		HttpResponse response = await connection.ParseResponseAsync();
+
+
+		using StreamReader reader = new(response.Body, Encoding.UTF8);
+		string body = await reader.ReadToEndAsync();
+
+		Console.WriteLine($"HTTP Request recieved: {response.StatusCode} {response.Message}");
+		Console.WriteLine($"Body: {body}");
+	}
 }

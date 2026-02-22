@@ -15,7 +15,7 @@ public sealed class HttpHeaders : IReadOnlyDictionary<string, string[]> {
     private readonly Dictionary<string, string[]> _stringCache = new(StringComparer.OrdinalIgnoreCase);
 
     // input to constructor has to use the internal ReadOnlyMemoryByteComparer as comparer!
-    internal HttpHeaders(Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>> inner) {
+    public HttpHeaders(Dictionary<ReadOnlyMemory<byte>, List<ReadOnlyMemory<byte>>> inner) {
         _raw = inner ?? throw new ArgumentNullException(nameof(inner));
     }
 
@@ -90,7 +90,7 @@ public sealed class HttpHeaders : IReadOnlyDictionary<string, string[]> {
 
 // for internal header storage.
 // compares case insensitively
-internal sealed class ReadOnlyMemoryByteComparer : IEqualityComparer<ReadOnlyMemory<byte>> {
+public sealed class ReadOnlyMemoryByteComparer : IEqualityComparer<ReadOnlyMemory<byte>> {
     public bool Equals(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y) {
         if (x.Equals(y)) return true;
         if (x.Length != y.Length) return false;

@@ -9,12 +9,12 @@ using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Connection;
 
-internal sealed class HttpClientConnection : HttpConnection {
-    internal HttpClientConnection(Stream stream, int inputBufferSize = 16384, int outputBufferSize = 16384, int maxLineSize = 4096, int maxHeaderSize = 32768)
+public sealed class HttpClientConnection : HttpConnection {
+    public HttpClientConnection(Stream stream, int inputBufferSize = 16384, int outputBufferSize = 16384, int maxLineSize = 4096, int maxHeaderSize = 32768)
         : base(stream, inputBufferSize, outputBufferSize, maxLineSize, maxHeaderSize) { }
 
 	//does not flush automatically.
-	internal async Task SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
+	public async Task SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
 		await SerializeRequestLineAsync(request.Method, request.Target, request.Version, cancellationToken).ConfigureAwait(false);
 		await SerializeHeadersAsync(request.Headers, cancellationToken).ConfigureAwait(false);
 		if (request.Body == Stream.Null) return;
@@ -22,7 +22,7 @@ internal sealed class HttpClientConnection : HttpConnection {
 		await SerializeBodyAsync(info, request.Body, cancellationToken);
 	}
 
-	internal async Task<HttpResponse> ParseResponseAsync(CancellationToken cancellationToken = default) {
+	public async Task<HttpResponse> ParseResponseAsync(CancellationToken cancellationToken = default) {
 		var (version, statusCode, reason) = await ParseResponseLineAsync(cancellationToken);
 		HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
 		FramingInfo info = headers.GetFramingInfo();

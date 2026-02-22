@@ -10,7 +10,7 @@ public sealed class ContentLengthDecodingStream : DecodingStream {
     private long _remaining;
     internal ContentLengthDecodingStream(HttpConnection connection, long contentlength) : base(connection) {
         if (connection == null) throw new ArgumentNullException(nameof(connection));
-        if (contentlength < 0) throw new ArgumentOutOfRangeException(nameof(contentlength), "Content length cannot be negative");
+		if (contentlength < 0) throw new ArgumentOutOfRangeException(nameof(contentlength), "Content length cannot be negative");
         _remaining = contentlength;
     }
 

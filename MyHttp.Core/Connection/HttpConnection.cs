@@ -13,7 +13,7 @@ using MyHttp.Core.Messages;
 namespace MyHttp.Core.Connection;
 
 //owns _stream.
-internal abstract class HttpConnection : IAsyncDisposable {
+public abstract class HttpConnection : IAsyncDisposable {
     internal readonly Stream _stream;
     private static readonly ReadOnlyMemoryByteComparer _comparer = new();
 
@@ -131,7 +131,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
 		}
 	}
 
-	internal async ValueTask FlushOutputAsync(CancellationToken cancellationToken = default) {
+	public async ValueTask FlushOutputAsync(CancellationToken cancellationToken = default) {
         if (_outputEnd == 0) return;
         await _stream.WriteAsync(_outputBuffer.AsMemory(0, _outputEnd), cancellationToken).ConfigureAwait(false);
         _outputEnd = 0;

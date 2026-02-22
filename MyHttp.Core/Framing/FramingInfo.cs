@@ -1,5 +1,5 @@
 namespace MyHttp.Core.Framing;
-internal readonly struct FramingInfo {
+public readonly struct FramingInfo {
     internal FramingMethod Method { get; }
     internal long ContentLength { get; } //only meaningful if Method == FramingMethod.CONTENTLENGTH, set to 0 otherwise.
     internal bool HasBody => Method != FramingMethod.NONE;
