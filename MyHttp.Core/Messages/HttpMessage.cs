@@ -1,5 +1,4 @@
 using System.IO;
-using System.Collections.Generic;
 
 namespace MyHttp.Core.Messages;
 //base class for requests & responses
@@ -10,7 +9,6 @@ public abstract class HttpMessage {
 
     internal HttpMessage(HttpVersion version, HttpHeaders headers, Stream body) {
         Version = version;
-        //copy dictionary for immutability
         Headers = headers;
         Body = body;
     }

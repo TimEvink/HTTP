@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Text;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,9 +10,8 @@ using MyHttp.Core.Framing;
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Connection;
-
 //owns _stream.
-public abstract class HttpConnection : IAsyncDisposable {
+internal abstract class HttpConnection : IAsyncDisposable {
     internal readonly Stream _stream;
     private static readonly ReadOnlyMemoryByteComparer _comparer = new();
 
@@ -32,7 +30,7 @@ public abstract class HttpConnection : IAsyncDisposable {
     private int FreeInputBytes => _inputBuffer.Length - _inputEnd;
 
     //output = bytes going out to _stream writes.
-    internal byte[] _outputBuffer;
+    protected byte[] _outputBuffer;
     protected int _outputEnd = 0;
 
     internal int FreeOutputBytes => _outputBuffer.Length - _outputEnd;
@@ -50,7 +48,7 @@ public abstract class HttpConnection : IAsyncDisposable {
 	protected const byte URI = 0x08; // uri chars used for fast path.
 	protected const byte HEX = 0x10; // used for (case-insenstive) hex chars for uri % encoding.
 
-	//const bytes/sequences of bytes.
+	//const bytes.
 	protected const byte LF = 0xa; // '\n'
 	protected const byte CR = 0xd; // '\r'
 	protected const byte SPACE = 0x20; // ' '
@@ -63,7 +61,7 @@ public abstract class HttpConnection : IAsyncDisposable {
 	protected const byte P = 0x50; // 'P'
 	protected const byte T = 0x54; // 'T'
 
-	internal static readonly ReadOnlyMemory<byte> HTTP = "HTTP/"u8.ToArray();
+	//private static readonly ReadOnlyMemory<byte> HTTP = "HTTP/"u8.ToArray();
 	private static readonly ReadOnlyMemory<byte> SetCookie = "Set-Cookie"u8.ToArray();
 
 	//initialize byte array for bit masking.
@@ -84,26 +82,15 @@ public abstract class HttpConnection : IAsyncDisposable {
 		CharClass['\t'] |= VALUE_OK;
         CharClass[' '] |= VALUE_OK;
 	}
-    protected HttpConnection(
-        Stream stream,
-        int inputBufferSize = 16384,
-        int outputBufferSize = 16384,
-        int maxLineSize = 4096,
-        int maxHeaderSize = 32768
-    ) {
-        if (stream == null) throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanRead || !stream.CanWrite) throw new ArgumentException("Stream must be readable and writable", nameof(stream));
-        if (inputBufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(inputBufferSize));
-        if (outputBufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(outputBufferSize));
-        if (maxLineSize <= 0) throw new ArgumentOutOfRangeException(nameof(maxLineSize));
-        if (maxLineSize > inputBufferSize) throw new ArgumentOutOfRangeException(nameof(maxLineSize), maxLineSize, "inputBufferSize must be at least maxLineSize");
-        if (maxLineSize > outputBufferSize) throw new ArgumentOutOfRangeException(nameof(maxLineSize), maxLineSize, "outputBufferSize must be at least maxLineSize");
-        if (maxHeaderSize <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeaderSize));
+
+    protected HttpConnection(Stream stream, HttpConnectionOptions options) {
+		ArgumentNullException.ThrowIfNull(stream);
+		if (!stream.CanRead || !stream.CanWrite) throw new ArgumentException("Stream must be readable and writable", nameof(stream));
         _stream = stream;
-        _inputBuffer = new byte[inputBufferSize];
-        _outputBuffer = new byte[outputBufferSize];
-        _maxLineSize = maxLineSize;
-        _maxHeaderSize = maxHeaderSize;
+		_inputBuffer = new byte[options.InputBufferSize];
+		_outputBuffer = new byte[options.OutputBufferSize];
+		_maxLineSize = options.MaxLineSize;
+		_maxHeaderSize = options.MaxHeaderSize;
     }
 
     //removes consumed bytes from inputbuffer to make room for more input, shifting unread bytes & empty slots to the left.
@@ -323,7 +310,7 @@ public abstract class HttpConnection : IAsyncDisposable {
             Memory<byte> name = _inputBuffer.AsMemory(_inputStart, colonOffset);
             ReadOnlySpan<byte> valueTrimmed = Trim(_inputBuffer.AsSpan(_inputStart + colonOffset + 1, _inputCursor - _inputStart - 3 - colonOffset));
             if (!headers.TryGetValue(name, out var list)) {
-                list = new List<ReadOnlyMemory<byte>>();
+                list = [];
                 headers[name] = list;
             }
             if (!hasComma || NeverSplitOnComma(name)) {

@@ -13,6 +13,5 @@ public sealed class HttpReason {
 
 	public HttpReason(string message) {
 		_rawMessage = Encoding.ASCII.GetBytes(message);
-		_cachedMessage = message;
 	}
 }

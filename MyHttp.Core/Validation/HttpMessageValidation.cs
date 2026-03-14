@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
 using MyHttp.Core.Exceptions;
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Validation;
-
 public static class HttpMessageValidator {
     // static HttpMessageValidator() { }
     public static void ValidateVersion(HttpMessage message) {

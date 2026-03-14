@@ -4,17 +4,16 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using MyHttp.Core.Exceptions;
-using MyHttp.Core.Framing;
 using MyHttp.Core.Messages;
+using MyHttp.Core.Framing;
 
 namespace MyHttp.Core.Connection;
-
-public sealed class HttpClientConnection : HttpConnection {
-    public HttpClientConnection(Stream stream, int inputBufferSize = 16384, int outputBufferSize = 16384, int maxLineSize = 4096, int maxHeaderSize = 32768)
-        : base(stream, inputBufferSize, outputBufferSize, maxLineSize, maxHeaderSize) { }
+internal sealed class HttpClientConnection : HttpConnection {
+	internal HttpClientConnection(Stream stream, HttpConnectionOptions? options = null)
+		: base(stream, options ?? HttpConnectionOptions.Default) { }
 
 	//does not flush automatically.
-	public async Task SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
+	internal async Task SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
 		await SerializeRequestLineAsync(request.Method, request.Target, request.Version, cancellationToken).ConfigureAwait(false);
 		await SerializeHeadersAsync(request.Headers, cancellationToken).ConfigureAwait(false);
 		if (request.Body == Stream.Null) return;
@@ -22,7 +21,7 @@ public sealed class HttpClientConnection : HttpConnection {
 		await SerializeBodyAsync(info, request.Body, cancellationToken);
 	}
 
-	public async Task<HttpResponse> ParseResponseAsync(CancellationToken cancellationToken = default) {
+	internal async Task<HttpResponse> ParseResponseAsync(CancellationToken cancellationToken = default) {
 		var (version, statusCode, reason) = await ParseResponseLineAsync(cancellationToken);
 		HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
 		FramingInfo info = headers.GetFramingInfo();
@@ -31,26 +30,26 @@ public sealed class HttpClientConnection : HttpConnection {
 	}
 
 	private async ValueTask SerializeRequestLineAsync(HttpMethod method, HttpRequestTarget target, HttpVersion version, CancellationToken cancellationToken) {
-        // "HTTP/1.1\r\n" is 10 bytes, plus 2 spaces makes 12
-        int lineLength = MethodBytes[(byte)method].Length + target._rawUrl.Length + 12;
-        if (lineLength > FreeOutputBytes) await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
+		// "HTTP/1.1\r\n" is 10 bytes, plus 2 spaces makes 12
+		int lineLength = MethodBytes[(byte)method].Length + target._rawUrl.Length + 12;
+		if (lineLength > FreeOutputBytes) await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
 
-        ReadOnlySpan<byte> methodSpan = MethodBytes[(byte)method].Span;
-        WriteOutput(methodSpan);
-        WriteOutput(SPACE);
-        WriteOutput(target._rawUrl.Span);
-        WriteOutput(SPACE);
+		ReadOnlySpan<byte> methodSpan = MethodBytes[(byte)method].Span;
+		WriteOutput(methodSpan);
+		WriteOutput(SPACE);
+		WriteOutput(target._rawUrl.Span);
+		WriteOutput(SPACE);
 		WriteOutput(H);
 		WriteOutput(T);
 		WriteOutput(T);
 		WriteOutput(P);
 		WriteOutput(SLASH);
 		WriteOutput((byte)('0' + version.Major));
-        WriteOutput(DOT);
-        WriteOutput((byte)('0' + version.Minor));
+		WriteOutput(DOT);
+		WriteOutput((byte)('0' + version.Minor));
 		WriteOutput(CR);
 		WriteOutput(LF);
-    }
+	}
 
 	private async ValueTask<(HttpVersion, HttpStatusCode, HttpReason)> ParseResponseLineAsync(CancellationToken cancellationToken) {
 		byte b;
@@ -67,7 +66,7 @@ public sealed class HttpClientConnection : HttpConnection {
 		if (b != SPACE) throw new BadResponseException("Space character must follow HTTP version");
 
 		//status code
-		HttpStatusCode statusCode = new (_inputBuffer[_inputCursor], _inputBuffer[_inputCursor + 1], _inputBuffer[_inputCursor + 2]);
+		HttpStatusCode statusCode = new(_inputBuffer[_inputCursor], _inputBuffer[_inputCursor + 1], _inputBuffer[_inputCursor + 2]);
 		_inputCursor += 3;
 
 		//space

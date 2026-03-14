@@ -1,15 +1,13 @@
-using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
-using Microsoft.VisualStudio.TestPlatform.ObjectModel.DataCollection;
-using MyHttp.Core.Connection;
-using MyHttp.Core.Messages;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace MyHttp.Tests.Streams;
+using MyHttp.Core.Connection;
+using MyHttp.Core.Messages;
 
+namespace MyHttp.Tests.Streams;
 public class StreamsTest {
 
 	private readonly ReadOnlyMemoryByteComparer _comparer = new();
@@ -33,8 +31,8 @@ public class StreamsTest {
 
 		//mimic a NetworkStream from TCP connection using a MemoryStream.
 		MemoryStream wireStream = new(1000);
-		var clientConnection = new HttpClientConnection(wireStream);
-		var serverConnection = new HttpServerConnection(wireStream);
+		var clientConnection = new HttpClientConnection(wireStream, HttpConnectionOptions.Default);
+		var serverConnection = new HttpServerConnection(wireStream, HttpConnectionOptions.Default);
 
 		//serialize
 		await clientConnection.SerializeRequestAsync(requestIn);
@@ -71,8 +69,8 @@ public class StreamsTest {
 
 		//mimic a NetworkStream from TCP connection using a MemoryStream.
 		MemoryStream wireStream = new(1000);
-		var clientConnection = new HttpClientConnection(wireStream);
-		var serverConnection = new HttpServerConnection(wireStream);
+		var clientConnection = new HttpClientConnection(wireStream, HttpConnectionOptions.Default);
+		var serverConnection = new HttpServerConnection(wireStream, HttpConnectionOptions.Default);
 
 		//serialize
 		await serverConnection.SerializeResponseAsync(responseIn);

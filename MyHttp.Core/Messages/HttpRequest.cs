@@ -1,9 +1,6 @@
 using System.IO;
-using System.Collections.Generic;
-using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Messages;
-
 public sealed class HttpRequest : HttpMessage {
     public HttpMethod Method { get; }
     public HttpRequestTarget Target { get; }

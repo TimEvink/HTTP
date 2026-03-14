@@ -1,5 +1,3 @@
-using System;
-
 using MyHttp.Core.Exceptions;
 using MyHttp.Core.Messages;
 

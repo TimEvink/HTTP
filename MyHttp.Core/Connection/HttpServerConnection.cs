@@ -8,20 +8,20 @@ using MyHttp.Core.Framing;
 using System.Threading;
 
 namespace MyHttp.Core.Connection;
+internal sealed class HttpServerConnection : HttpConnection {
+    internal HttpServerConnection(Stream stream, HttpConnectionOptions? options = null)
+		: base(stream, options ?? HttpConnectionOptions.Default) { }
 
-public sealed class HttpServerConnection : HttpConnection {
-    public HttpServerConnection(Stream stream, int inputBufferSize = 16384, int outputBufferSize = 16384, int maxLineSize = 4096, int maxHeaderSize = 32768)
-        : base(stream, inputBufferSize, outputBufferSize, maxLineSize, maxHeaderSize) { }
-
-	public async Task SerializeResponseAsync(HttpResponse response, CancellationToken cancellationToken = default) {
+	internal async Task SerializeResponseAsync(HttpResponse response, CancellationToken cancellationToken = default) {
 		await SerializeResponseLineAsync(response.Version, response.StatusCode, response.Message, cancellationToken).ConfigureAwait(false);
 		await SerializeHeadersAsync(response.Headers, cancellationToken).ConfigureAwait(false);
 		if (response.Body == Stream.Null) return;
 		FramingInfo info = response.Headers.GetFramingInfo();
-		await SerializeBodyAsync(info, response.Body, cancellationToken);
+		await SerializeBodyAsync(info, response.Body, cancellationToken).ConfigureAwait(false);
+		await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
 	}
 
-	public async Task<HttpRequest> ParseRequestAsync(CancellationToken cancellationToken = default) {
+	internal async Task<HttpRequest> ParseRequestAsync(CancellationToken cancellationToken = default) {
 		var (method, target, version) = await ParseRequestLineAsync(cancellationToken).ConfigureAwait(false);
 		HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
 		FramingInfo info = headers.GetFramingInfo();

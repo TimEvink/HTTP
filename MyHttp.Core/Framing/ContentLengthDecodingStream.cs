@@ -1,11 +1,9 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MyHttp.Core.Connection;
 
 namespace MyHttp.Core.Framing;
-
 public sealed class ContentLengthDecodingStream : DecodingStream {
     private long _remaining;
     internal ContentLengthDecodingStream(HttpConnection connection, long contentlength) : base(connection) {
