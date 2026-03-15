@@ -205,6 +205,8 @@ internal abstract class HttpConnection : IAsyncDisposable {
                     remaining -= read;
                 }
                 break;
+			case FramingMethod.NONE:
+				return;
             default:
                 throw new BadMessageException("Framing method not supported");
         }

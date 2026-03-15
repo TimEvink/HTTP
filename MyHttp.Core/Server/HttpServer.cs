@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -14,6 +15,9 @@ public class HttpServer : IDisposable {
 	private readonly Func<Exception, HttpResponse> _errorHandler;
 	private readonly HttpConnectionOptions _options;
 
+	private readonly List<Task> _connections = [];
+	private readonly Lock _lock = new();
+
 	public HttpServer(
 		int port,
 		Func<HttpRequest, CancellationToken, Task<HttpResponse>> requestHandler,
@@ -24,23 +28,41 @@ public class HttpServer : IDisposable {
 		_port = port;
 		_server = new(IPAddress.Loopback, port);
 		_requestHandler = requestHandler;
-		_errorHandler = errorHandler ?? Responses.GetDefault500Response;
+		_errorHandler = errorHandler ??= _ => Responses.GetDefault500Response();
 		_options = options ?? HttpConnectionOptions.Default;
 	}
 
-	public void Start() {
+	public async Task RunAsync(CancellationToken cancellationToken = default) {
 		_server.Start();
 		Console.WriteLine("Starting server.");
 		Console.WriteLine($"Listening on localhost:{_port}");
-	}
 
-	public async Task ServeClients(CancellationToken cancellationToken = default) {
-		while (!cancellationToken.IsCancellationRequested) {
+		while (true) {
+			TcpClient client;
 			try {
-				TcpClient client = await AcceptTcpClientAsync(cancellationToken);
-				_ = HandleTcpClient(client, cancellationToken);
-			} catch (OperationCanceledException) {
+				client = await _server.AcceptTcpClientAsync(cancellationToken);
+			} catch (Exception e) when (e is OperationCanceledException or ObjectDisposedException) {
 				break;
+			}
+
+			Task task;
+			try {
+				task = HandleTcpClient(client, cancellationToken);
+			} catch (Exception exception) {
+				Console.Error.WriteLine($"Client error: {exception}");
+				continue;
+			}
+
+			_ = task.ContinueWith(t => {
+				if (t.IsFaulted)
+					Console.Error.WriteLine(t.Exception);
+				lock (_lock) {
+					_connections.Remove(t);
+				}
+			}, TaskContinuationOptions.ExecuteSynchronously);
+
+			lock (_lock) {
+				_connections.Add(task);
 			}
 		}
 	}
@@ -53,24 +75,17 @@ public class HttpServer : IDisposable {
 		_server.Stop();
 	}
 
-	public ValueTask<TcpClient> AcceptTcpClientAsync(CancellationToken cancellationToken) {
-		return _server.AcceptTcpClientAsync(cancellationToken);
-	}
-
 	private async Task HandleTcpClient(TcpClient client, CancellationToken cancellationToken) {
-		try {
-			using (client)
-			using (NetworkStream stream = client.GetStream()) {
-				if (client.Client.RemoteEndPoint is not IPEndPoint remoteEndPoint) {
-					Console.WriteLine($"Connected client has no endpoint, breaking connection");
-					return;
-				}
-				Console.WriteLine($"Connected to: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
-
-				await stream.HandleRequests(_requestHandler, _errorHandler, _options, cancellationToken);
+		using (client)
+		using (NetworkStream stream = client.GetStream()) {
+			if (client.Client.RemoteEndPoint is not IPEndPoint remoteEndPoint) {
+				Console.WriteLine($"Connected client has no endpoint, breaking connection");
+				return;
 			}
-		} catch (Exception exception) {
-			Console.Error.WriteLine($"Client error: {exception}");
+			Console.WriteLine($"Connected to: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
+
+			var serverConnection = new HttpServerConnection(stream, _options);
+			await serverConnection.HandleRequests(_requestHandler, _errorHandler, cancellationToken);
 		}
 	}
 }

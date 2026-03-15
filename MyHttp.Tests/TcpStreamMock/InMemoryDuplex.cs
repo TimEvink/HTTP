@@ -1,9 +1,10 @@
-﻿using System.IO;
+﻿using MyHttp.Core.Connection;
+using System.IO;
 using System.IO.Pipelines;
 
 namespace MyHttp.Tests.TcpStreamMock;
 internal static class InMemoryDuplex {
-	internal static (Stream client, Stream server) Create() {
+	internal static (Stream clientStream, Stream serverStream) GetStreams() {
 		var serverToClient = new Pipe();
 		var clientToServer = new Pipe();
 
@@ -17,6 +18,11 @@ internal static class InMemoryDuplex {
 		);
 
 		return (clientStream, serverStream);
+	}
+
+	internal static (HttpClientConnection clientConnection, HttpServerConnection serverConnection) GetConnections() {
+		var (clientStream, serverStream) = GetStreams();
+		return (new(clientStream), new(serverStream));
 	}
 }
 

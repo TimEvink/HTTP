@@ -24,8 +24,6 @@ public static class Responses {
 		{ "Content-Length"u8.ToArray(), new List<ReadOnlyMemory<byte>>(1) { Encoding.ASCII.GetBytes(_bodyBytes.Length.ToString()) } }
 	});
 
-	public static HttpResponse GetDefault500Response(Exception exception) {
-		Console.Error.WriteLine(exception);
-		return new HttpResponse(_version, _statusCode, _reason, _headers, new MemoryStream(_bodyBytes, writable: false));
-	}
+	public static HttpResponse GetDefault500Response()
+		=> new(_version, _statusCode, _reason, _headers, new MemoryStream(_bodyBytes, writable: false));
 }

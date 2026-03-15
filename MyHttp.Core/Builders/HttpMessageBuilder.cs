@@ -46,13 +46,18 @@ public abstract class HttpMessageBuilder<TBuilder> where TBuilder : HttpMessageB
 		return (TBuilder)this;
 	}
 
+	//Also sets content-length appropriately.
 	public TBuilder WithBody(string body, Encoding? encoding = null) {
 		encoding ??= Encoding.UTF8;
-		_body = new MemoryStream(encoding.GetBytes(body), writable: false);
+		var bytes = encoding.GetBytes(body);
+		WithHeader("Content-Length", bytes.Length.ToString());
+		_body = new MemoryStream(bytes, writable: false);
 		return (TBuilder)this;
 	}
 
+	//Also sets content-length appropriately.
 	public TBuilder WithBody(byte[] body) {
+		WithHeader("Content-Length", body.Length.ToString());
 		_body = new MemoryStream(body);
 		return (TBuilder)this;
 	}

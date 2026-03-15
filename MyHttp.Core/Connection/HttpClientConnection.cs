@@ -13,12 +13,16 @@ internal sealed class HttpClientConnection : HttpConnection {
 		: base(stream, options ?? HttpConnectionOptions.Default) { }
 
 	//does not flush automatically.
-	internal async Task SerializeRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
+	internal async Task SerializeRequestAsync(HttpRequest request, bool flush = true, CancellationToken cancellationToken = default) {
 		await SerializeRequestLineAsync(request.Method, request.Target, request.Version, cancellationToken).ConfigureAwait(false);
 		await SerializeHeadersAsync(request.Headers, cancellationToken).ConfigureAwait(false);
-		if (request.Body == Stream.Null) return;
-		FramingInfo info = request.Headers.GetFramingInfo();
-		await SerializeBodyAsync(info, request.Body, cancellationToken);
+
+		if (request.Body != Stream.Null) {
+			FramingInfo info = request.Headers.GetFramingInfo();
+			await SerializeBodyAsync(info, request.Body, cancellationToken);
+		}
+		if (flush)
+			await FlushOutputAsync(cancellationToken).ConfigureAwait(false);
 	}
 
 	internal async Task<HttpResponse> ParseResponseAsync(CancellationToken cancellationToken = default) {

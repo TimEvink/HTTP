@@ -12,8 +12,7 @@ static class Server {
 
 		HttpServer server = new(port, TestHandler);
 
-		server.Start();
-		await server.ServeClients();
+		await server.RunAsync();
 	}
 
 	private static async Task<HttpResponse> TestHandler(HttpRequest request, CancellationToken cancellationToken = default) {

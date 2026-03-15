@@ -10,21 +10,19 @@ using MyHttp.Core.Messages;
 namespace MyHttp.Core.Server;
 internal static class HttpServerConnectionHandler {
 	internal static async Task HandleRequests(
-		this Stream stream,
+		this HttpServerConnection serverConnection,
 		Func<HttpRequest, CancellationToken, Task<HttpResponse>> handler,
 		Func<Exception, HttpResponse>? errorHandler = null,
-		HttpConnectionOptions? options = null,
 		CancellationToken cancellationToken = default
 	) {
-		await using HttpServerConnection connection = new(stream, options);
-		errorHandler ??= exception => Responses.GetDefault500Response(exception);
+		errorHandler ??= _ => Responses.GetDefault500Response();
 
 		while (!cancellationToken.IsCancellationRequested) {
 			HttpRequest request;
 			HttpResponse response;
 
 			try {
-				request = await connection.ParseRequestAsync(cancellationToken);
+				request = await serverConnection.ParseRequestAsync(cancellationToken);
 				LogRequest(request);
 			} catch (BadMessageException requestException) {
 				Console.Error.WriteLine(requestException);
@@ -45,7 +43,7 @@ internal static class HttpServerConnectionHandler {
 			}
 
 			try {
-				await connection.SerializeResponseAsync(response, cancellationToken);
+				await serverConnection.SerializeResponseAsync(response, cancellationToken);
 			} catch {
 				return;
 			} finally {
