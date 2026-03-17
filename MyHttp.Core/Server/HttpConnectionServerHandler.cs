@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,7 +23,6 @@ internal static class HttpServerConnectionHandler {
 
 			try {
 				request = await serverConnection.ParseRequestAsync(cancellationToken);
-				LogRequest(request);
 			} catch (BadMessageException requestException) {
 				Console.Error.WriteLine(requestException);
 				return;
@@ -33,6 +32,7 @@ internal static class HttpServerConnectionHandler {
 
 			try {
 				response = await handler(request, cancellationToken);
+				ConsoleLogger.LogRequest(request, response);
 			} catch (Exception exception) {
 				Console.Error.WriteLine(exception);
 				try {
@@ -65,14 +65,5 @@ internal static class HttpServerConnectionHandler {
 				return true;
 		}
 		return false;
-	}
-
-	private static void LogRequest(HttpRequest request) {
-		// Basic info: timestamp, client info if available, method, and target
-		string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-		string method = request.Method.ToString();
-		string url = request.Target.RawUrl;
-
-		Console.WriteLine($"[{timestamp}] {method} {url}");
 	}
 }

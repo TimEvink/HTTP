@@ -26,7 +26,7 @@ internal sealed class HttpServerConnection : HttpConnection {
 		var (method, target, version) = await ParseRequestLineAsync(cancellationToken).ConfigureAwait(false);
 		HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
 		FramingInfo info = headers.GetFramingInfo();
-		Stream body = info.HasBody ? getDecodingStream(info) : Stream.Null;
+		Stream body = info.HasBody ? GetDecodingStream(info) : Stream.Null;
 		return new HttpRequest(method, target, version, headers, body);
 	}
 

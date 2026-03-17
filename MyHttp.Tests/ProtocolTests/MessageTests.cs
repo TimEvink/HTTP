@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using MyHttp.Core.Messages;
 using MyHttp.Core.Builders;
 using MyHttp.Tests.TcpStreamMock;
+using System.Linq;
 
 namespace MyHttp.Tests.Protocol;
 public class MessageTests {
@@ -118,5 +119,28 @@ public class MessageTests {
 			string messageOut = await reader.ReadToEndAsync();
 			Assert.Equal(messageIn, messageOut);
 		}
+	}
+
+	[Fact]
+	public async Task HttpHeadersTest() {
+		var (clientConnection, serverConnection) = InMemoryDuplex.GetConnections();
+
+		HttpRequest requestOut = new HttpRequestBuilder(HttpMethod.GET, "/")
+			.WithHeader("Accept", "application/json")
+			.WithHeader("HenkCounter", "0")
+			.WithHeader("HenkCounter", "1")
+			.WithHeader("henkcounter", "2")
+			.WithHeader("Content-Length", "0")
+			.Build();
+
+		await clientConnection.SerializeRequestAsync(requestOut);
+
+		var requestIn = await serverConnection.ParseRequestAsync();
+
+		Assert.Equal("application/json", requestIn.Headers["Accept"][0]);
+		Assert.Equal(3, requestIn.Headers["HenkCounter"].Length);
+		Assert.Equal("0", requestIn.Headers["HenkCounter"][0]);
+		Assert.Equal("1", requestIn.Headers["HenkCounter"][1]);
+		Assert.Equal("2", requestIn.Headers["HenkCounter"][2]);
 	}
 }

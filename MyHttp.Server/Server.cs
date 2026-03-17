@@ -16,8 +16,12 @@ static class Server {
 	}
 
 	private static async Task<HttpResponse> TestHandler(HttpRequest request, CancellationToken cancellationToken = default) {
-		await ValueTask.CompletedTask;
-		return (request.Method == HttpMethod.GET && request.Target.RawUrl == "/")
+		await Task.CompletedTask;
+
+		if (request.Target.RawUrl != "/")
+			return HttpResponses.NotFound();
+
+		return (request.Method == HttpMethod.GET)
 			? HttpResponses.Ok("Hello from server!")
 			: HttpResponses.BadRequest("Disappointment from server!");
 	}

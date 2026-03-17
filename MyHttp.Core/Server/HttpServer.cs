@@ -34,8 +34,7 @@ public class HttpServer : IDisposable {
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
 		_server.Start();
-		Console.WriteLine("Starting server.");
-		Console.WriteLine($"Listening on localhost:{_port}");
+		ConsoleLogger.LogInfo($"Listening on http://localhost:{_port}");
 
 		while (true) {
 			TcpClient client;

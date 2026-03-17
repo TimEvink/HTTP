@@ -1,7 +1,7 @@
 ﻿using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Builders;
-internal class HttpResponseBuilder : HttpMessageBuilder<HttpResponseBuilder> {
+public class HttpResponseBuilder : HttpMessageBuilder<HttpResponseBuilder> {
 	private readonly HttpStatusCode _statusCode;
 	private readonly HttpReason _reason;
 

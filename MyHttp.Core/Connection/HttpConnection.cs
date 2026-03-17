@@ -1,13 +1,14 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime.CompilerServices;
 
 using MyHttp.Core.Exceptions;
 using MyHttp.Core.Framing;
 using MyHttp.Core.Messages;
+using MyHttp.Core.Parsing;
 
 namespace MyHttp.Core.Connection;
 //owns _stream.
@@ -15,8 +16,8 @@ internal abstract class HttpConnection : IAsyncDisposable {
     internal readonly Stream _stream;
     private static readonly ReadOnlyMemoryByteComparer _comparer = new();
 
-    //input = bytes coming in from _stream reads.
-    internal byte[] _inputBuffer;
+	//input = bytes coming in from _stream reads.
+	internal byte[] _inputBuffer;
 	internal int _inputStart = 0;
     protected int _inputCursor = 0;
     protected int _inputEnd = 0;
@@ -49,6 +50,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
 	protected const byte HEX = 0x10; // used for (case-insenstive) hex chars for uri % encoding.
 
 	//const bytes.
+	protected const byte HTAB = 0x09; // '\t'
 	protected const byte LF = 0xa; // '\n'
 	protected const byte CR = 0xd; // '\r'
 	protected const byte SPACE = 0x20; // ' '
@@ -165,7 +167,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
         return new HttpVersion(majorChar - (byte)'0', minorChar - (byte)'0');
     }
 
-    protected DecodingStream getDecodingStream(FramingInfo info) {
+    protected DecodingStream GetDecodingStream(FramingInfo info) {
         return info.Method switch {
             FramingMethod.CONTENTLENGTH => new ContentLengthDecodingStream(this, info.ContentLength),
             FramingMethod.NONE => throw new ArgumentException("No decoding stream exists for an empty body"),
@@ -199,12 +201,13 @@ internal abstract class HttpConnection : IAsyncDisposable {
                 while (remaining > 0) {
                     if (FreeOutputBytes == 0) await FlushOutputAsync(cancellationToken);
 					int maxToRead = (int)Math.Min(FreeOutputBytes, remaining);
-					int read = await body.ReadAsync(_outputBuffer.AsMemory(_outputEnd, maxToRead));
+					int read = await body.ReadAsync(_outputBuffer.AsMemory(_outputEnd, maxToRead), cancellationToken);
 					_outputEnd += read;
                     if (read == 0) throw new EndOfStreamException("Message body too small");
                     remaining -= read;
                 }
-                break;
+				await body.DisposeAsync();
+				return;
 			case FramingMethod.NONE:
 				return;
             default:
@@ -268,11 +271,11 @@ internal abstract class HttpConnection : IAsyncDisposable {
     //separates on ',' and trims the parts.
     //callback based as spans are incompatible with generators.
     private static void SplitOnCommas(ReadOnlySpan<byte> span, Action<ReadOnlySpan<byte>> onElement) {
-        int tokenStart = -1;
+        int tokenStart = 0;
         int lastNonWhiteSpace = -1;
         for (int i = 0; i < span.Length; i++) {
             byte b = span[i];
-            if (b == (byte)',') {
+            if (b == COMMA) {
                 if (lastNonWhiteSpace >= tokenStart) {
                     onElement(span.Slice(tokenStart, lastNonWhiteSpace - tokenStart + 1));
                 }
@@ -280,7 +283,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
                 tokenStart = i + 1;
                 lastNonWhiteSpace = tokenStart - 1;
             } else {
-                if (b != (byte)' ' && b != (byte)'\t') lastNonWhiteSpace = i;
+                if (b != SPACE && b != HTAB) lastNonWhiteSpace = i;
             }
         }
         // emit last token
@@ -303,7 +306,7 @@ internal abstract class HttpConnection : IAsyncDisposable {
             _inputStart = _inputCursor;
         }
     }
-
+	
 	// NOTE: Quoted-string parsing intentionally not supported.
 	// Consequently, if a header name allows comma separated values, the parser will separate the corresponding raw header value regardless of quotes surrounding commas.
 	protected async ValueTask<HttpHeaders> ParseHeadersAsync(CancellationToken cancellationToken) {
@@ -318,7 +321,10 @@ internal abstract class HttpConnection : IAsyncDisposable {
             if (!hasComma || NeverSplitOnComma(name)) {
                 list.Add(valueTrimmed.ToArray());
             } else {
-                SplitOnCommas(valueTrimmed, part => list.Add(part.ToArray()));
+				var enumerator = new CommaSplitEnumerator(valueTrimmed);
+				while (enumerator.MoveNext()) {
+					list.Add(enumerator.Current.ToArray());
+				}
             }
         }
         return new HttpHeaders(headers);

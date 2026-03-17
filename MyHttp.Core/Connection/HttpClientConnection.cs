@@ -29,7 +29,7 @@ internal sealed class HttpClientConnection : HttpConnection {
 		var (version, statusCode, reason) = await ParseResponseLineAsync(cancellationToken);
 		HttpHeaders headers = await ParseHeadersAsync(cancellationToken).ConfigureAwait(false);
 		FramingInfo info = headers.GetFramingInfo();
-		Stream body = info.HasBody ? getDecodingStream(info) : Stream.Null;
+		Stream body = info.HasBody ? GetDecodingStream(info) : Stream.Null;
 		return new HttpResponse(version, statusCode, reason, headers, body);
 	}
 

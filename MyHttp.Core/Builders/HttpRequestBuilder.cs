@@ -3,7 +3,7 @@
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Builders;
-internal class HttpRequestBuilder : HttpMessageBuilder<HttpRequestBuilder> {
+public class HttpRequestBuilder : HttpMessageBuilder<HttpRequestBuilder> {
 	private readonly HttpMethod _method;
 	private readonly HttpRequestTarget _target;
 
