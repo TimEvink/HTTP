@@ -2,6 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 using MyHttp.Core.Connection;
 using MyHttp.Core.Exceptions;
@@ -13,6 +14,7 @@ internal static class HttpServerConnectionHandler {
 		this HttpServerConnection serverConnection,
 		Func<HttpRequest, CancellationToken, Task<HttpResponse>> handler,
 		Func<Exception, HttpResponse>? errorHandler = null,
+		bool loggingEnabled = true,
 		CancellationToken cancellationToken = default
 	) {
 		errorHandler ??= _ => Responses.GetDefault500Response();
@@ -22,19 +24,28 @@ internal static class HttpServerConnectionHandler {
 			HttpResponse response;
 
 			try {
+				
 				request = await serverConnection.ParseRequestAsync(cancellationToken);
 			} catch (BadMessageException requestException) {
-				Console.Error.WriteLine(requestException);
+				if (loggingEnabled)
+					Console.Error.WriteLine(requestException);
 				return;
 			} catch (EndOfStreamException) {
 				return;
 			}
 
 			try {
-				response = await handler(request, cancellationToken);
-				ConsoleLogger.LogRequest(request, response);
+				if (loggingEnabled) {
+					var stopwatch = Stopwatch.StartNew();
+					response = await handler(request, cancellationToken);
+					stopwatch.Stop();
+					ConsoleLogger.LogRequest(request, response, stopwatch.Elapsed);
+				} else {
+					response = await handler(request, cancellationToken);
+				}
 			} catch (Exception exception) {
-				Console.Error.WriteLine(exception);
+				if (loggingEnabled)
+					Console.Error.WriteLine(exception);
 				try {
 					response = errorHandler(exception);
 				} catch {

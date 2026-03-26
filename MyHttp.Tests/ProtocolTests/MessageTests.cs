@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using MyHttp.Core.Messages;
 using MyHttp.Core.Builders;
 using MyHttp.Tests.TcpStreamMock;
-using System.Linq;
 
 namespace MyHttp.Tests.Protocol;
 public class MessageTests {

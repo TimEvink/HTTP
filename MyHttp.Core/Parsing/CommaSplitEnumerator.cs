@@ -1,6 +1,7 @@
 ﻿using System;
 
 namespace MyHttp.Core.Parsing;
+
 internal ref struct CommaSplitEnumerator {
 	private readonly ReadOnlySpan<byte> _span;
 	private int _index;

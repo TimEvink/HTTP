@@ -15,7 +15,7 @@ public sealed class HttpClient : IAsyncDisposable {
 		_connection = new(client.GetStream(), options ?? HttpConnectionOptions.Default);
 	}
 
-	public async Task<HttpResponse> SendRequestAsync(HttpRequest request, CancellationToken cancellationToken) {
+	public async Task<HttpResponse> SendRequestAsync(HttpRequest request, CancellationToken cancellationToken = default) {
 		await _connection.SerializeRequestAsync(request, true, cancellationToken).ConfigureAwait(false);
 		return await _connection.ParseResponseAsync(cancellationToken).ConfigureAwait(false);
 	}

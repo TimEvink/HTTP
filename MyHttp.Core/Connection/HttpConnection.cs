@@ -267,31 +267,6 @@ internal abstract class HttpConnection : IAsyncDisposable {
     private static bool NeverSplitOnComma(ReadOnlyMemory<byte> headername)
         => _comparer.Equals(headername, SetCookie);
 
-    //for splitting a header value as span.
-    //separates on ',' and trims the parts.
-    //callback based as spans are incompatible with generators.
-    private static void SplitOnCommas(ReadOnlySpan<byte> span, Action<ReadOnlySpan<byte>> onElement) {
-        int tokenStart = 0;
-        int lastNonWhiteSpace = -1;
-        for (int i = 0; i < span.Length; i++) {
-            byte b = span[i];
-            if (b == COMMA) {
-                if (lastNonWhiteSpace >= tokenStart) {
-                    onElement(span.Slice(tokenStart, lastNonWhiteSpace - tokenStart + 1));
-                }
-                //reset
-                tokenStart = i + 1;
-                lastNonWhiteSpace = tokenStart - 1;
-            } else {
-                if (b != SPACE && b != HTAB) lastNonWhiteSpace = i;
-            }
-        }
-        // emit last token
-        if (lastNonWhiteSpace >= tokenStart) {
-            onElement(span.Slice(tokenStart, lastNonWhiteSpace - tokenStart + 1));
-        }
-    }
-
     //owns _inputStart and _headerBytesRead reset.
     //iteration usage will automatically have the colonOffset relative to the correct _linestart
     private async IAsyncEnumerable<(int, bool)> ReadHeadersAsync([EnumeratorCancellation] CancellationToken cancellationToken) {

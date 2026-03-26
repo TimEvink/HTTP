@@ -14,14 +14,16 @@ public class HttpServer : IDisposable {
 	private readonly Func<HttpRequest, CancellationToken, Task<HttpResponse>> _requestHandler;
 	private readonly Func<Exception, HttpResponse> _errorHandler;
 	private readonly HttpConnectionOptions _options;
+	private readonly bool _loggingEnabled;
 
-	private readonly List<Task> _connections = [];
+	private readonly HashSet<Task> _connections = [];
 	private readonly Lock _lock = new();
 
 	public HttpServer(
 		int port,
 		Func<HttpRequest, CancellationToken, Task<HttpResponse>> requestHandler,
 		Func<Exception, HttpResponse>? errorHandler = null,
+		bool loggingEnabled = true,
 		HttpConnectionOptions? options = null
 	) {
 		//TODO: validate port;
@@ -30,6 +32,7 @@ public class HttpServer : IDisposable {
 		_requestHandler = requestHandler;
 		_errorHandler = errorHandler ??= _ => Responses.GetDefault500Response();
 		_options = options ?? HttpConnectionOptions.Default;
+		_loggingEnabled = loggingEnabled;
 	}
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
@@ -48,12 +51,13 @@ public class HttpServer : IDisposable {
 			try {
 				task = HandleTcpClient(client, cancellationToken);
 			} catch (Exception exception) {
-				Console.Error.WriteLine($"Client error: {exception}");
+				if (_loggingEnabled)
+					Console.Error.WriteLine($"Client error: {exception}");
 				continue;
 			}
 
 			_ = task.ContinueWith(t => {
-				if (t.IsFaulted)
+				if (t.IsFaulted && _loggingEnabled)
 					Console.Error.WriteLine(t.Exception);
 				lock (_lock) {
 					_connections.Remove(t);
@@ -77,14 +81,11 @@ public class HttpServer : IDisposable {
 	private async Task HandleTcpClient(TcpClient client, CancellationToken cancellationToken) {
 		using (client)
 		using (NetworkStream stream = client.GetStream()) {
-			if (client.Client.RemoteEndPoint is not IPEndPoint remoteEndPoint) {
-				Console.WriteLine($"Connected client has no endpoint, breaking connection");
-				return;
-			}
-			Console.WriteLine($"Connected to: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
-
+			if (_loggingEnabled && client.Client.RemoteEndPoint is IPEndPoint remoteEndPoint) 
+				Console.WriteLine($"Connected to: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
+			
 			var serverConnection = new HttpServerConnection(stream, _options);
-			await serverConnection.HandleRequests(_requestHandler, _errorHandler, cancellationToken);
+			await serverConnection.HandleRequests(_requestHandler, _errorHandler, _loggingEnabled, cancellationToken);
 		}
 	}
 }

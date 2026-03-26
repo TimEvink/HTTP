@@ -16,8 +16,8 @@ namespace MyHttp.Tests.Parsing {
 		[InlineData("a,,c", 2, new[] { "a", "c" })]
 		[InlineData(",a ,b \t", 2, new[] { "a", "b" })]
 		[InlineData("a,b,", 2, new[] { "a", "b" })]
-		[InlineData("a,  b c ,", 2, new[] { "a", "b c" })]
 		[InlineData(" a , b ,c ", 3, new[] { "a", "b", "c" })]
+		[InlineData("a,  b c ,", 2, new[] { "a", "b c" })]
 		public void CommaSplitEnumerator_ShouldSplitCorrectly(string input, int expectedCount, string[] expectedTokens) {
 			// Arrange
 			ReadOnlySpan<byte> span = System.Text.Encoding.ASCII.GetBytes(input);

@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHttp.Client", "MyHttp.Cli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHttp.Tests", "MyHttp.Tests\MyHttp.Tests.csproj", "{00EE81D5-CA22-40E6-A30B-CF3AD1BC78A6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHttp.FileHost", "MyHttp.FileHost\MyHttp.FileHost.csproj", "{82BB65DE-9CE6-4989-895D-EAF7109AA196}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,8 +71,23 @@ Global
 		{00EE81D5-CA22-40E6-A30B-CF3AD1BC78A6}.Release|x64.Build.0 = Release|Any CPU
 		{00EE81D5-CA22-40E6-A30B-CF3AD1BC78A6}.Release|x86.ActiveCfg = Release|Any CPU
 		{00EE81D5-CA22-40E6-A30B-CF3AD1BC78A6}.Release|x86.Build.0 = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|x64.Build.0 = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Debug|x86.Build.0 = Debug|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|x64.ActiveCfg = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|x64.Build.0 = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|x86.ActiveCfg = Release|Any CPU
+		{82BB65DE-9CE6-4989-895D-EAF7109AA196}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9B5EE031-F261-4E48-862B-0FFDCB9BFC99}
 	EndGlobalSection
 EndGlobal
