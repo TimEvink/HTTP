@@ -1,15 +1,13 @@
-using System.IO;
-using System.Collections.Generic;
-
 using MyHttp.Core.Messages;
+using MyHttp.Core.Builders;
 
 namespace MyHttp.Client;
-public static class Requests {
-    public static HttpRequest DefaultGet() {
-        HttpVersion version = new(1, 1);
-        HttpRequestTarget target = new("/");
-        Dictionary<string, string> headers = new();
-        headers.Add("Host", "localhost");
-        return new HttpRequest(HttpMethod.GET, target, version, headers, Stream.Null);
-    }
+internal static class Requests {
+	internal static HttpRequest Get(string path = "/") => new HttpRequestBuilder(HttpMethod.GET, path)
+		.WithHeader("Accept", "text/html")
+		.WithHeader("Host", "localhost")
+		.WithHeader("Connection", "close")
+		.WithHeader("Accept-Language", "en-US")
+		.WithHeader("Content-Length", "0")
+		.Build();
 }

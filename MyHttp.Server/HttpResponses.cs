@@ -1,28 +1,26 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+using System;
 
 using MyHttp.Core.Messages;
+using MyHttp.Core.Builders;
 
-namespace MyHttp.Server;
+namespace MyHttp.Core.Server;
 public static class HttpResponses {
-    public static HttpResponse Ok(string message) {
-        HttpVersion version = new(1, 1);
-        int statuscode = 200;
-        string statusmessage = "OK";
-        Dictionary<string, string> headers = new();
-        headers.Add("Content-Length", message.Length.ToString());
-        Stream body = new MemoryStream(Encoding.UTF8.GetBytes(message));
-        return new HttpResponse(version, statuscode, statusmessage, headers, body);
-    }
+	public static HttpResponse Ok(string message) => new HttpResponseBuilder(200, "OK")
+		.WithHeader("Content-Type", "text/html; charset=utf-8")
+		.WithHeader("Date", DateTime.UtcNow.ToString("r"))
+		.WithHeader("Server", "MyHttpServer/0.2")
+		.WithBody(@$"<html><body style=""text-align:center; font-family:sans-serif;""><h1>{message}</h1></body></html>")
+		.Build();
 
-    public static HttpResponse BadRequest(string message) {
-        HttpVersion version = new(1, 1);
-        int statuscode = 400;
-        string statusmessage = "BAD REQUEST";
-        Dictionary<string, string> headers = new();
-        headers.Add("Content-Length", message.Length.ToString());
-        Stream body = new MemoryStream(Encoding.UTF8.GetBytes(message));
-        return new HttpResponse(version, statuscode, statusmessage, headers, body);
-    }
+	public static HttpResponse BadRequest(string message) => new HttpResponseBuilder(400, "OK")
+		.WithHeader("Content-Type", "text/html; charset=utf-8")
+		.WithHeader("Date", DateTime.UtcNow.ToString("r"))
+		.WithHeader("Server", "MyHttpServer/0.2")
+		.WithBody(@$"<html><body style=""text-align:center; font-family:sans-serif;""><h1>{message}</h1></body></html>")
+		.Build();
+
+	public static HttpResponse NotFound() => new HttpResponseBuilder(404, "Not Found")
+		.WithHeader("Content-Type", "text/html; charset=utf-8")
+		.WithBody(@"<html><body style=""text-align:center; font-family:sans-serif;""><h1>404 Not Found</h1></body></html>")
+		.Build();
 }

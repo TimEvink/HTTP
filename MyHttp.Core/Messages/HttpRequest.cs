@@ -1,6 +1,4 @@
 using System.IO;
-using System.Collections.Generic;
-using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Messages;
 public sealed class HttpRequest : HttpMessage {
@@ -11,9 +9,9 @@ public sealed class HttpRequest : HttpMessage {
         HttpMethod method,
         HttpRequestTarget target,
         HttpVersion version,
-        Dictionary<string, string> headers,
+        HttpHeaders headers,
         Stream body
-    ) : base(version, headers, body){
+    ) : base(version, headers, body) {
         Method = method;
         Target = target;
     }

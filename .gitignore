@@ -421,3 +421,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# release script for private use
+release.ps1

@@ -1,21 +1,26 @@
-using System;
-using System.IO;
-using System.Net;
-using System.Net.Sockets;
+﻿using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+using MyHttp.Core.Server;
+using MyHttp.Core.Messages;
 
 namespace MyHttp.Server;
-public class Server {
-    TcpListener _listener;
-    int _port;
-    public Server(int port = 8000) {
-        _listener = new(IPAddress.Loopback, port);
-        _port = port;
-    }
+public static class Server {
+	public static async Task Main(string[] args) {
+		int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000;
 
-    public void Start() {
-        _listener.Start();
-        Console.WriteLine($"Server listing on {IPAddress.Loopback}:{_port}\n");
-    }
+		HttpServer server = new(port, TestHandler, loggingEnabled: false);
 
+		await server.RunAsync();
+	}
 
+	private static HttpResponse TestHandler(HttpRequest request) {
+		if (request.Target.RawUrl != "/")
+			return HttpResponses.NotFound();
+
+		return (request.Method == HttpMethod.GET)
+			? HttpResponses.Ok("Hello from server!")
+			: HttpResponses.BadRequest("Disappointment from server!");
+	}
 }
