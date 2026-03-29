@@ -15,9 +15,7 @@ public static class Server {
 		await server.RunAsync();
 	}
 
-	private static async Task<HttpResponse> TestHandler(HttpRequest request, CancellationToken cancellationToken = default) {
-		await Task.CompletedTask;
-
+	private static HttpResponse TestHandler(HttpRequest request) {
 		if (request.Target.RawUrl != "/")
 			return HttpResponses.NotFound();
 

@@ -23,9 +23,7 @@ public class EchoTest {
 					.WithHeader("Content-Type", "text/plain; charset=utf-8")
 					.WithBody(requestBody)
 					.Build();
-			},
-			null,
-			cts.Token
+			}
 		);
 
 		//ensure the serverTask code awaits a request parse

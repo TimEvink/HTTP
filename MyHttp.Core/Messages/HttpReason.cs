@@ -14,4 +14,6 @@ public sealed class HttpReason {
 	public HttpReason(string message) {
 		_rawMessage = Encoding.ASCII.GetBytes(message);
 	}
+
+	public override string ToString() => Message;
 }

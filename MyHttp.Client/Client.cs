@@ -6,8 +6,8 @@ using MyHttp.Core.Client;
 using System.Threading.Tasks;
 
 namespace MyHttp.Client;
-static class Client {
-	static async Task Main(string[] args) {
+public static class Client {
+	public static async Task Main(string[] args) {
 		int port = args.Length != 0 && Int32.TryParse(args[0], out int result) ? result : 8000;
 
 		await using var client = new HttpClient("127.0.0.1", port);

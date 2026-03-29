@@ -23,11 +23,11 @@ public readonly struct HttpStatusCode {
 		this.b2 = b2;
 	}
 
-	//public override string ToString() => string.Create(3, this, static (span, state) => {
-	//	span[0] = (char)state.b0;
-	//	span[1] = (char)state.b1;
-	//	span[2] = (char)state.b2;
-	//});
+	public override string ToString() => string.Create(3, this, static (span, state) => {
+		span[0] = (char)state.b0;
+		span[1] = (char)state.b1;
+		span[2] = (char)state.b2;
+	});
 
 	public ushort ToUInt16() => (ushort)(
 		(b0 - (byte)'0') * 100 +

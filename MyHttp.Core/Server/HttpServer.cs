@@ -8,10 +8,11 @@ using MyHttp.Core.Connection;
 using MyHttp.Core.Messages;
 
 namespace MyHttp.Core.Server;
-public class HttpServer : IDisposable {
+public sealed class HttpServer : IDisposable {
 	private readonly int _port;
 	private readonly TcpListener _server;
-	private readonly Func<HttpRequest, CancellationToken, Task<HttpResponse>> _requestHandler;
+	private readonly Func<HttpRequest, HttpResponse>? _requestHandler = null;
+	private readonly Func<HttpRequest, CancellationToken, Task<HttpResponse>>? _requestHandlerAsync = null;
 	private readonly Func<Exception, HttpResponse> _errorHandler;
 	private readonly HttpConnectionOptions _options;
 	private readonly bool _loggingEnabled;
@@ -21,7 +22,23 @@ public class HttpServer : IDisposable {
 
 	public HttpServer(
 		int port,
-		Func<HttpRequest, CancellationToken, Task<HttpResponse>> requestHandler,
+		Func<HttpRequest, HttpResponse> requestHandler,
+		Func<Exception, HttpResponse>? errorHandler = null,
+		bool loggingEnabled = true,
+		HttpConnectionOptions? options = null
+	) {
+		//TODO: validate port;
+		_port = port;
+		_server = new(IPAddress.Any, port);
+		_requestHandler = requestHandler;
+		_errorHandler = errorHandler ??= _ => Responses.GetDefault500Response();
+		_options = options ?? HttpConnectionOptions.Default;
+		_loggingEnabled = loggingEnabled;
+	}
+
+	public HttpServer(
+		int port,
+		Func<HttpRequest, CancellationToken, Task<HttpResponse>> requestHandlerAsync,
 		Func<Exception, HttpResponse>? errorHandler = null,
 		bool loggingEnabled = true,
 		HttpConnectionOptions? options = null
@@ -29,7 +46,7 @@ public class HttpServer : IDisposable {
 		//TODO: validate port;
 		_port = port;
 		_server = new(IPAddress.Loopback, port);
-		_requestHandler = requestHandler;
+		_requestHandlerAsync = requestHandlerAsync;
 		_errorHandler = errorHandler ??= _ => Responses.GetDefault500Response();
 		_options = options ?? HttpConnectionOptions.Default;
 		_loggingEnabled = loggingEnabled;
@@ -85,7 +102,11 @@ public class HttpServer : IDisposable {
 				Console.WriteLine($"Connected to: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
 			
 			var serverConnection = new HttpServerConnection(stream, _options);
-			await serverConnection.HandleRequests(_requestHandler, _errorHandler, _loggingEnabled, cancellationToken);
+			if (_requestHandler is not null) {
+				await serverConnection.HandleRequests(_requestHandler, _errorHandler, _loggingEnabled, cancellationToken);
+
+			}
+			await serverConnection.HandleRequests(_requestHandlerAsync!, _errorHandler, _loggingEnabled, cancellationToken);
 		}
 	}
 }

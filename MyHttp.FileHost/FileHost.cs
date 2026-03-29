@@ -1,129 +1,15 @@
-﻿using MyHttp.Core.Builders;
-using MyHttp.Core.Messages;
-using MyHttp.Core.Server;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
+using MyHttp.Core.Builders;
+using MyHttp.Core.Messages;
+using MyHttp.Core.Server;
+
 namespace MyHttp.FileHost;
 public class FileHost {
-	public static async Task Main(string[] args) {
-		if (!TryParseArgs(args, out int port, out string rootPath))
-			return;
-
-		HttpServer server = new(
-			port,
-			async (request, _) => await FileHostHandler(request, rootPath),
-			loggingEnabled: true
-		);
-
-		await server.RunAsync();
-	}
-
-	private static async Task<HttpResponse> FileHostHandler(HttpRequest request, string rootPath) {
-		try {
-			if (request.Method != HttpMethod.GET && request.Method != HttpMethod.HEAD)
-				return NotAllowed();
-
-			string url = request.Target.RawUrl.Split('?', '#')[0];
-			if (url == "/")
-				url = "/index.html";
-
-			string fullPath = Path.GetFullPath(
-				Path.Combine(rootPath, url.TrimStart('/'))
-			);
-
-			if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
-				throw new UnauthorizedAccessException();
-
-			if (Directory.Exists(fullPath)) {
-				fullPath = Path.Combine(fullPath, "index.html");
-			}
-
-			if (!File.Exists(fullPath))
-				return NotFound();
-
-			if (!_MimeTypes.TryGetValue(Path.GetExtension(fullPath), out var mimeType))
-				mimeType = "application/octet-stream";
-
-			var builder = new HttpResponseBuilder(200, "OK")
-				.WithHeader("Content-Type", mimeType)
-				.WithHeader("Date", DateTime.UtcNow.ToString("r"))
-				.WithHeader("Server", "MyHttpServer/0.2");
-
-			if (request.Method == HttpMethod.HEAD) {
-				return builder
-					.WithHeader("Content-Length", new FileInfo(fullPath).Length.ToString())
-					.Build();
-			}
-
-			Stream body = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 8 * 1024, useAsync: true);
-
-			return builder
-				.WithHeader("Content-Length", body.Length.ToString())
-				.WithBody(body)
-				.Build();
-		} catch (UnauthorizedAccessException) {
-			return new HttpResponseBuilder(403, "Forbidden")
-				.WithHeader("Content-Type", "text/html; charset=utf-8")
-				.WithHeader("Content-Length", "0")
-				.Build();
-		} catch {
-			return InternalServerError();
-		}
-	}
-
-	private static bool TryParseArgs(string[] args, out int port, out string rootPath) {
-		try {
-			if (args.Length != 2)
-				throw new ArgumentException("Expected 2 arguments: <port> <absolutePath>");
-
-			// Parse port
-			if (!int.TryParse(args[0], out var portRaw) || portRaw <= 0 || portRaw > 65535)
-				throw new ArgumentException("Invalid port number.");
-
-			port = portRaw;
-
-			// Parse path
-			rootPath = args[1];
-
-			if (!Path.IsPathRooted(args[1]))
-				throw new ArgumentException("Path must be absolute.");
-
-			rootPath = Path.GetFullPath(args[1]);
-			return true;
-		} catch (Exception exception) {
-			Console.WriteLine($"Failed to parse arguments: {exception.Message}");
-			port = 0;
-			rootPath = "";
-			return false;
-		}
-	}
-
-	public static HttpResponse Ok(string message) => new HttpResponseBuilder(200, "OK")
-		.WithHeader("Content-Type", "text/html; charset=utf-8")
-		.WithHeader("Date", DateTime.UtcNow.ToString("r"))
-		.WithHeader("Server", "MyHttpServer/0.2")
-		.WithBody(@$"<html><body style=""text-align:center; font-family:sans-serif;""><h1>{message}</h1></body></html>")
-		.Build();
-
-	public static HttpResponse NotAllowed() => new HttpResponseBuilder(405, "Method Not Allowed")
-		.WithHeader("Allow", "GET, HEAD")
-		.WithHeader("Content-Length", "0")
-		.Build();
-
-	public static HttpResponse NotFound() => new HttpResponseBuilder(404, "Not Found")
-		.WithHeader("Content-Type", "text/html; charset=utf-8")
-		.WithBody(@"<html><body style=""text-align:center; font-family:sans-serif;""><h1>404 Not Found</h1></body></html>")
-		.Build();
-
-	public static HttpResponse InternalServerError() => new HttpResponseBuilder(500, "Internal Server Error")
-		.WithHeader("Content-Type", "text/html; charset=utf-8")
-		.WithBody(@"<html><body style=""text-align:center; font-family:sans-serif;""><h1>500 Internal Server Error</h1></body></html>")
-		.Build();
-
-	public static readonly Dictionary<string, string> _MimeTypes = new(StringComparer.OrdinalIgnoreCase) {
+	private static readonly Dictionary<string, string> _MimeTypes = new(StringComparer.OrdinalIgnoreCase) {
 		[".html"] = "text/html; charset=utf-8",
 		[".htm"] = "text/html; charset=utf-8",
 		[".css"] = "text/css; charset=utf-8",
@@ -152,4 +38,94 @@ public class FileHost {
 		[".pdf"] = "application/pdf",
 		[".zip"] = "application/zip"
 	};
+
+	public static async Task Main(string[] args) {
+		if (!TryParseArgs(args, out int port, out string rootPath))
+			return;
+
+		HttpServer server = new(
+			port,
+			request => FileHostHandler(request, rootPath),
+			loggingEnabled: true
+		);
+
+		await server.RunAsync();
+	}
+	private static bool TryParseArgs(string[] args, out int port, out string rootPath) {
+		try {
+			if (args.Length != 2)
+				throw new ArgumentException("Expected 2 arguments: <port> <absolutePath>");
+
+			// Parse port
+			if (!int.TryParse(args[0], out var portRaw) || portRaw <= 0 || portRaw > 65535)
+				throw new ArgumentException("Invalid port number.");
+
+			port = portRaw;
+
+			// Parse path
+			rootPath = args[1];
+
+			if (!Path.IsPathRooted(args[1]))
+				throw new ArgumentException("Path must be absolute.");
+
+			rootPath = Path.GetFullPath(args[1]);
+			return true;
+		} catch (Exception exception) {
+			Console.WriteLine($"Failed to parse arguments: {exception.Message}");
+			port = 0;
+			rootPath = "";
+			return false;
+		}
+	}
+
+	private static HttpResponse FileHostHandler(HttpRequest request, string rootPath) {
+		try {
+			if (request.Method != HttpMethod.GET && request.Method != HttpMethod.HEAD)
+				return Responses.NotAllowed();
+
+			string url = request.Target.RawUrl.Split('?')[0];
+			if (url == "/")
+				url = "/index.html";
+
+			string fullPath = Path.GetFullPath(Path.Combine(rootPath, url.TrimStart('/')));
+
+			if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+				throw new UnauthorizedAccessException();
+
+			if (Directory.Exists(fullPath)) {
+				fullPath = Path.Combine(fullPath, "index.html");
+			}
+
+			if (!File.Exists(fullPath))
+				return Responses.NotFound();
+
+			if (!_MimeTypes.TryGetValue(Path.GetExtension(fullPath), out var mimeType))
+				mimeType = "application/octet-stream";
+
+			var builder = new HttpResponseBuilder(200, "OK")
+				.WithHeader("Content-Type", mimeType)
+				.WithHeader("Date", DateTime.UtcNow.ToString("r"))
+				.WithHeader("Server", "MyHttpServer/0.2");
+
+			if (request.Method == HttpMethod.HEAD) {
+				return builder
+					.WithHeader("Content-Length", new FileInfo(fullPath).Length.ToString())
+					.Build();
+			}
+
+			Stream body = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 8 * 1024, useAsync: true);
+
+			return builder
+				.WithHeader("Content-Length", body.Length.ToString())
+				.WithBody(body)
+				.Build();
+		} catch (UnauthorizedAccessException) {
+			return new HttpResponseBuilder(403, "Forbidden")
+				.WithHeader("Content-Type", "text/html; charset=utf-8")
+				.WithHeader("Content-Length", "0")
+				.Build();
+		} catch {
+			return Responses.InternalServerError();
+		}
+	}
 }

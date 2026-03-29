@@ -2,8 +2,8 @@ using MyHttp.Core.Messages;
 using MyHttp.Core.Builders;
 
 namespace MyHttp.Client;
-public static class Requests {
-	public static HttpRequest Get(string path = "/") => new HttpRequestBuilder(HttpMethod.GET, path)
+internal static class Requests {
+	internal static HttpRequest Get(string path = "/") => new HttpRequestBuilder(HttpMethod.GET, path)
 		.WithHeader("Accept", "text/html")
 		.WithHeader("Host", "localhost")
 		.WithHeader("Connection", "close")
